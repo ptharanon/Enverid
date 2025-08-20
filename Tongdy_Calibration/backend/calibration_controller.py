@@ -16,6 +16,8 @@ class CalibrationController:
 
     def __init__(self, sensor, esp32, sample_period_s=5):
         self.TIME = 10 # debug timer 10s
+        self.TIME_UNIT = "seconds"  # or "minutes"
+
         self.sensor = sensor
         self.esp32 = esp32
         self.sample_period_s = sample_period_s
@@ -59,46 +61,46 @@ class CalibrationController:
     def _process(self):
         try:
             # 1) Baseline
-            self._status("Collecting baseline (5 min)")
+            self._status(f"Collecting baseline ({self.TIME} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME)
             self._push_struct("baseline", avg)
             if not self.running: return
 
             # 2) Gas injection hold
-            self._status("Injecting calibration gas (5 min)")
+            self._status(f"Injecting calibration gas ({self.TIME} {self.TIME_UNIT})")
             self.esp32.start_gas()
             self._sleep_with_checks(self.TIME)
             self.esp32.stop()
             if not self.running: return
 
             # 3) Exposure measurement
-            self._status("Collecting exposure (5 min)")
+            self._status(f"Collecting exposure ({self.TIME} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME)
             self._push_struct("exposure", avg)
             if not self.running: return
 
             # 4) Vent
-            self._status("Venting (5 min)")
+            self._status(f"Venting ({self.TIME} {self.TIME_UNIT})")
             self.esp32.vent()
             self._sleep_with_checks(self.TIME)
             self.esp32.stop()
             if not self.running: return
 
             # 5) Post-vent measurement
-            self._status("Collecting post-vent (5 min)")
+            self._status(f"Collecting post-vent ({self.TIME} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME)
             self._push_struct("vented", avg)
             if not self.running: return
 
             # 6) Save to DB (via db_queue)
-            self._status("Saving calibration record")
+            self._status("Saving sensor records")
             db_queue.put({
-                "type": "calibration",
+                "type": "collection_complete",
                 "sensor_id": self.sensor.sensor_id,
                 "baseline": self.struct["baseline"],
                 "exposure": self.struct["exposure"],
                 "vented": self.struct["vented"],
             })
-            self._status("Calibration complete")
+            self._status("Data collection complete")
         finally:
             self.running = False

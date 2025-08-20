@@ -63,7 +63,7 @@ def _insert_calibration_record(sensor_id, baseline, exposure, vented):
 def db_worker():
     """Consume db_queue messages:
        - {"type":"sensor_batch","readings":[(sid,val),...]}
-       - {"type":"calibration","sensor_id":int,"baseline":float,"exposure":float,"vented":float}
+       - {"type":"collection_complete","sensor_id":int,"baseline":float,"exposure":float,"vented":float}
        - {"type":"stop"}  -> clean shutdown
     """
     while True:
@@ -73,7 +73,7 @@ def db_worker():
                 break
             if msg["type"] == "sensor_batch":
                 _insert_sensor_data_batch(msg["readings"])
-            elif msg["type"] == "calibration":
+            elif msg["type"] == "collection_complete":
                 _insert_calibration_record(
                     msg["sensor_id"], msg["baseline"], msg["exposure"], msg["vented"]
                 )

@@ -21,14 +21,14 @@ class DashboardScreen(Screen):
 
         # Live sensor
         live = MDCard(orientation="vertical", padding=10, size_hint=(1, None), height=120)
-        live.add_widget(MDLabel(text="Live CO₂ (ppm)", halign="center", font_style="H6"))
+        live.add_widget(MDLabel(text="Real-time CO2 (ppm)", halign="center", font_style="H6"))
         self.live_value = MDLabel(text="--", halign="center", font_style="H4")
         live.add_widget(self.live_value)
         root.add_widget(live)
 
         # Struct values
         card = MDCard(orientation="vertical", padding=10, size_hint=(1, None), height=180)
-        card.add_widget(MDLabel(text="Calibration Averages", halign="center", font_style="H6"))
+        card.add_widget(MDLabel(text="CO2 Average", halign="center", font_style="H6"))
         grid = GridLayout(cols=3, height=100, size_hint=(1, None), padding=10, spacing=10)
         self.baseline = MDLabel(text="Baseline:\n--", halign="center")
         self.exposure = MDLabel(text="Exposure:\n--", halign="center")
@@ -65,9 +65,13 @@ class DashboardScreen(Screen):
                 self.live_value.text = f"{msg['value']:.2f}"
             elif t == "struct_update":
                 s = msg["struct"]
-                self.baseline.text = "baseline"
-                self.exposure.text = "exposure"
-                self.vented.text = "vented"
-                # self.baseline.text = f"Baseline:\n{('--' if s['baseline'] is None else f'{s['baseline']:.2f}')}"
-                # self.exposure.text = f"Exposure:\n{('--' if s['exposure'] is None else f'{s['exposure']:.2f}')}"
-                # self.vented.text   = f"Post-vent:\n{('--' if s['vented']   is None else f'{s['vented']:.2f}')}"
+                # self.baseline.text = "baseline"
+                # self.exposure.text = "exposure"
+                # self.vented.text = "vented"
+                baseline_val = "--" if s['baseline'] is None else f"{s['baseline']:.2f}"
+                exposure_val = "--" if s['exposure'] is None else f"{s['exposure']:.2f}"
+                vented_val = "--" if s['vented'] is None else f"{s['vented']:.2f}"
+                # Update labels with formatted values
+                self.baseline.text = f"Baseline:\n{baseline_val}"
+                self.exposure.text = f"Exposure:\n{exposure_val}"
+                self.vented.text = f"Post-vent:\n{vented_val}"
