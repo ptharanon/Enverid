@@ -1,42 +1,73 @@
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivymd.uix.label import MDLabel
+from kivymd.uix.button import MDRectangleFlatButton
 from kivymd.uix.card import MDCard
 from kivy.clock import Clock
 from kivy.uix.screenmanager import Screen
 from backend.ui_queue import ui_queue
 
 class DashboardScreen(Screen):
-    def __init__(self, **kwargs):
+    def __init__(self, controller, **kwargs):
         super().__init__(**kwargs)
+        self.controller = controller
 
-        self.sensor_cards = {}  # {sensor_id: MDCard}
-        self.sensor_labels = {}  # {sensor_id: MDLabel}
+        root = BoxLayout(orientation="vertical", spacing=10, padding=10)
+        self.add_widget(root)
 
-        layout = BoxLayout(orientation="vertical", spacing=10, padding=10)
-        self.add_widget(layout)
+        # Status
+        self.status_label = MDLabel(text="Status: Ready", halign="center", font_style="H6")
+        root.add_widget(self.status_label)
 
-        for sensor_id in [1,2,3]:
-            card = MDCard(orientation="vertical", padding=10, size_hint=(1, None), height=80, md_bg_color=(0.1,0.1,0.2,1))
-            label = MDLabel(text=f"Sensor {sensor_id}: --", halign="center", font_style="H5")
-            card.add_widget(label)
-            layout.add_widget(card)
+        # Live sensor
+        live = MDCard(orientation="vertical", padding=10, size_hint=(1, None), height=120)
+        live.add_widget(MDLabel(text="Live CO₂ (ppm)", halign="center", font_style="H6"))
+        self.live_value = MDLabel(text="--", halign="center", font_style="H4")
+        live.add_widget(self.live_value)
+        root.add_widget(live)
 
-            self.sensor_cards[sensor_id] = card
-            self.sensor_labels[sensor_id] = label
+        # Struct values
+        card = MDCard(orientation="vertical", padding=10, size_hint=(1, None), height=180)
+        card.add_widget(MDLabel(text="Calibration Averages", halign="center", font_style="H6"))
+        grid = GridLayout(cols=3, height=100, size_hint=(1, None), padding=10, spacing=10)
+        self.baseline = MDLabel(text="Baseline:\n--", halign="center")
+        self.exposure = MDLabel(text="Exposure:\n--", halign="center")
+        self.vented = MDLabel(text="Post-vent:\n--", halign="center")
+        for w in (self.baseline, self.exposure, self.vented):
+            grid.add_widget(w)
+        card.add_widget(grid)
+        root.add_widget(card)
 
-        Clock.schedule_interval(self.update_ui, 0.5)
+        # Buttons
+        btn_row = BoxLayout(orientation="horizontal", size_hint=(1, None), height=70, spacing=20, padding=[0,10,0,0])
+        btn_row.add_widget(MDRectangleFlatButton(text="Start", on_release=self.on_start))
+        btn_row.add_widget(MDRectangleFlatButton(text="Stop", on_release=self.on_stop))
+        root.add_widget(btn_row)
 
-    def update_ui(self, dt):
+        Clock.schedule_interval(self._drain_ui_queue, 0.5)
+
+    def on_start(self, *_):
+        if not self.controller.running:
+            self.controller.start()
+
+    def on_stop(self, *_):
+        if self.controller.running:
+            self.controller.stop()
+            self.status_label.text = "Status: Stopping..."
+
+    def _drain_ui_queue(self, dt):
         while not ui_queue.empty():
-            sensor_id, value = ui_queue.get()
-            if sensor_id in self.sensor_labels:
-                label = self.sensor_labels[sensor_id]
-                label.text = f"Sensor {sensor_id}: {value:.2f}"
-                # Optional: change card color based on thresholds
-                card = self.sensor_cards[sensor_id]
-                if value > 1500:
-                    card.md_bg_color = (1,0,0,1)  # red if high
-                elif value > 800:
-                    card.md_bg_color = (1,1,0,1)  # yellow if moderate
-                else:
-                    card.md_bg_color = (0.1,0.1,0.2,1)  # default
+            msg = ui_queue.get()
+            t = msg.get("type")
+            if t == "status":
+                self.status_label.text = f"Status: {msg['text']}"
+            elif t == "sensor_value":
+                self.live_value.text = f"{msg['value']:.2f}"
+            elif t == "struct_update":
+                s = msg["struct"]
+                self.baseline.text = "baseline"
+                self.exposure.text = "exposure"
+                self.vented.text = "vented"
+                # self.baseline.text = f"Baseline:\n{('--' if s['baseline'] is None else f'{s['baseline']:.2f}')}"
+                # self.exposure.text = f"Exposure:\n{('--' if s['exposure'] is None else f'{s['exposure']:.2f}')}"
+                # self.vented.text   = f"Post-vent:\n{('--' if s['vented']   is None else f'{s['vented']:.2f}')}"

@@ -1,10 +1,11 @@
-from .base_sensor import BaseSensor
+# backend/tongdy_sensor.py
 import random
 
-class TongdySensor(BaseSensor):
-    def read_data(self):
-        # mock sensor data
-        return random.uniform(400, 2000)  
+class TongdySensor:
+    def __init__(self, sensor_id: int, name: str = "Tongdy CO2 Sensor"):
+        self.sensor_id = sensor_id
+        self.name = name
 
-    def calibrate(self):
-        print("Calibrating CO2 sensor...")
+    def read_value(self) -> float:
+        """Simulate reading a CO2 value (ppm)."""
+        return 400 + random.uniform(-5, 5)  # around fresh-air baseline

@@ -1,4 +1,3 @@
 from queue import Queue
-
-ui_queue = Queue()  # Thread-safe queue for UI updates
-# This queue will be used to push data to the UI thread
+# Single shared UI queue for all background → UI messages
+ui_queue = Queue()
