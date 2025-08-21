@@ -1,0 +1,19 @@
+# /etc/systemd/system/tg8-modbus.service
+[Unit]
+Description=TG8 Modbus RTU Poller
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/tg8
+ExecStart=/usr/bin/python3 /home/pi/tg8/tg8_modbus_poll_to_sqlite.py --port /dev/ttyUSB0 --ids 1 2 3 --poll-interval 5 --db /home/pi/tg8/tg8_readings.sqlite -v
+Restart=on-failure
+RestartSec=5
+
+# Give serial and filesystem access
+AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

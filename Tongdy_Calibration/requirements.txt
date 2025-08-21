@@ -1,3 +1,5 @@
 kivy
 kivymd
 sqlalchemy
+pymodbus
+pyserial
