@@ -24,9 +24,20 @@ class SensorPoller:
 
     def _run(self):
         while self.running:
-            val = self.sensor.read_value()
-            # UI update (live)
-            ui_queue.put({"type": "sensor_value", "sensor_id": self.sensor.sensor_id, "value": val})
-            # DB write batch (single reading here, but still via queue)
-            db_queue.put({"type": "sensor_batch", "readings": [(self.sensor.sensor_id, val)]})
+            vals = self.sensor.read_values() or {}
+            co2 = vals.get("co2")
+            temp = vals.get("temperature")
+            rh   = vals.get("humidity")
+
+            # UI: show live values (even if some are None)
+            ui_queue.put({"type": "live_values", "data": {"co2": co2, "temperature": temp, "humidity": rh}})
+
+            # DB: store what we have
+            batch = []
+            if co2 is not None: batch.append((self.sensor.sensor_id if hasattr(self.sensor, "sensor_id") else 1, "co2", co2))
+            if temp is not None: batch.append((self.sensor.sensor_id if hasattr(self.sensor, "sensor_id") else 1, "temperature", float(temp)))
+            if rh   is not None: batch.append((self.sensor.sensor_id if hasattr(self.sensor, "sensor_id") else 1, "humidity", float(rh)))
+            if batch:
+                db_queue.put({"type": "sensor_batch", "readings": batch})
+
             time.sleep(self.interval)

@@ -5,7 +5,6 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "sensors.db"
 
-# Global DB queue (batched, thread-safe)
 db_queue = queue.Queue()
 
 def init_db():
@@ -18,10 +17,12 @@ def init_db():
         model TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
+    # add metric column so we can store co2/temp/humidity
     cur.execute("""
     CREATE TABLE IF NOT EXISTS sensor_data (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sensor_id INTEGER NOT NULL,
+        metric TEXT NOT NULL,              -- 'co2' | 'temperature' | 'humidity'
         value REAL NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
@@ -38,13 +39,15 @@ def init_db():
     conn.close()
 
 def _insert_sensor_data_batch(readings):
-    """readings: list[(sensor_id:int, value:float)]"""
+    """
+    readings: list[(sensor_id:int, metric:str, value:float)]
+    """
     if not readings:
         return
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.executemany(
-        "INSERT INTO sensor_data (sensor_id, value) VALUES (?, ?)",
+        "INSERT INTO sensor_data (sensor_id, metric, value) VALUES (?, ?, ?)",
         readings
     )
     conn.commit()
@@ -61,11 +64,6 @@ def _insert_calibration_record(sensor_id, baseline, exposure, vented):
     conn.close()
 
 def db_worker():
-    """Consume db_queue messages:
-       - {"type":"sensor_batch","readings":[(sid,val),...]}
-       - {"type":"collection_complete","sensor_id":int,"baseline":float,"exposure":float,"vented":float}
-       - {"type":"stop"}  -> clean shutdown
-    """
     while True:
         msg = db_queue.get()
         try:
@@ -73,7 +71,7 @@ def db_worker():
                 break
             if msg["type"] == "sensor_batch":
                 _insert_sensor_data_batch(msg["readings"])
-            elif msg["type"] == "collection_complete":
+            elif msg["type"] == "calibration":
                 _insert_calibration_record(
                     msg["sensor_id"], msg["baseline"], msg["exposure"], msg["vented"]
                 )

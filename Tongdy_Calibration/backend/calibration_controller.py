@@ -34,6 +34,11 @@ class CalibrationController:
 
     def stop(self):
         self.running = False
+        # ensure relays are off
+        try:
+            self.esp32.stop()
+        except Exception:
+            pass
 
     def _status(self, text: str):
         ui_queue.put({"type": "status", "text": text})
@@ -46,10 +51,11 @@ class CalibrationController:
         values = []
         start = time.time()
         while self.running and (time.time() - start < duration_s):
-            v = self.sensor.read_value()
+            v = (self.sensor.read_values() or {}).get("co2")
             values.append(v)
-            # optional: show sample during collection
-            ui_queue.put({"type": "sensor_value", "sensor_id": self.sensor.sensor_id, "value": v})
+            if v is not None:
+                values.append(float(v))
+                ui_queue.put({"type": "sensor_value", "sensor_id": getattr(self.sensor, "sensor_id", 1), "value": v})
             time.sleep(self.sample_period_s)
         return (mean(values) if values else None)
 
@@ -92,15 +98,22 @@ class CalibrationController:
             self._push_struct("vented", avg)
             if not self.running: return
 
-            # 6) Save to DB (via db_queue)
-            self._status("Saving sensor records")
+            # 6) Save
+            self._status("Saving calibration record")
             db_queue.put({
-                "type": "collection_complete",
-                "sensor_id": self.sensor.sensor_id,
+                "type": "calibration",
+                "sensor_id": getattr(self.sensor, "sensor_id", 1),
                 "baseline": self.struct["baseline"],
                 "exposure": self.struct["exposure"],
                 "vented": self.struct["vented"],
             })
-            self._status("Data collection complete")
+            self._status("Calibration complete")
         finally:
             self.running = False
+            # Fail-safe: ensure all outputs are off
+            try:
+                self.esp32.stop()
+            except Exception:
+                pass
+
+# Exhaust + Motorize in/out added

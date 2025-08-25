@@ -15,12 +15,15 @@ class App(MDApp):
         self.db_thread = start_db_worker()
 
         # Hardware
-        self.sensor = TongdySensor(sensor_id=1)
-        self.esp32 = ESP32Interface()
+        self.sensor = TongdySensor(port="/dev/ttyUSB0", slave_address=1)  # adjust as needed
+        # Give it a consistent id so DB rows have a sensor_id
+        self.sensor.sensor_id = 1
+        self.esp32 = ESP32Interface()  # GPIO23,24 active-low
 
         # Background services
         self.poller = SensorPoller(sensor=self.sensor, interval=60)
         self.poller.start()
+        # Calibration controller uses CO2 samples every 5s during windows
         self.controller = CalibrationController(sensor=self.sensor, esp32=self.esp32, sample_period_s=5)
 
         # UI
@@ -32,6 +35,9 @@ class App(MDApp):
 
     def on_stop(self):
         # Graceful shutdown
-        self.poller.stop()
+        try:
+            self.poller.stop()
+        except Exception:
+            pass
         db_queue.put({"type": "stop"})  # stop DB worker
 

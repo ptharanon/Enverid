@@ -3,3 +3,4 @@ kivymd
 sqlalchemy
 pymodbus
 pyserial
+minimalmodbus
