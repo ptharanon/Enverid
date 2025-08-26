@@ -4,3 +4,5 @@ sqlalchemy
 pymodbus
 pyserial
 minimalmodbus
+kivy-garden
+kivy-garden.graph

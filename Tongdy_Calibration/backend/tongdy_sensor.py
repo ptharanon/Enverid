@@ -34,23 +34,34 @@ class TongdySensor:
         """
         Returns a dict: {"co2": ppm, "temperature": °C, "humidity": %RH}
         NOTE: Register addresses/scaling must match the TG9 Modbus map.
-              The example below assumes:
-                - CO2:    HR 0 (ppm, int)
-                - Temp:   HR 1 (°C x10, signed)
-                - Hum:    HR 2 (%RH x10, unsigned)
+                - CO2:    ADDR 0 (ppm, int)
+                - Temp:   ADDR 4 (°C x10, signed)
+                - Hum:    ADDR 6 (%RH x10, unsigned)
         """
+
+        ADDR_CO2 = 0
+        ADDR_TEMP = 4
+        ADDR_HUMID = 6
+        FUNCTION_CODE = 4
+
         if not self.instrument:
             return {"co2": None, "temperature": None, "humidity": None}
 
         try:
-            co2      = self.instrument.read_register(0, 0, functioncode=3, signed=False)
-            temp_10  = self.instrument.read_register(1, 1, functioncode=3, signed=True)
-            rh_10    = self.instrument.read_register(2, 1, functioncode=3, signed=False)
+            co2      = self.instrument.read_float(registeraddress=ADDR_CO2, 
+                                                  functioncode=FUNCTION_CODE, 
+                                                  number_of_registers=2)
+            temp  = self.instrument.read_float(registeraddress=ADDR_TEMP, 
+                                                  functioncode=FUNCTION_CODE, 
+                                                  number_of_registers=2)
+            humid    = self.instrument.read_float(registeraddress=ADDR_HUMID, 
+                                                  functioncode=FUNCTION_CODE, 
+                                                  number_of_registers=2)
 
             return {
-                "co2": co2,
-                "temperature": float(temp_10),   # already /10 via decimals=1
-                "humidity": float(rh_10)        # already /10 via decimals=1
+                "co2": round(co2,0),
+                "temperature": round(temp,2),   
+                "humidity": round(humid,2)
             }
         except Exception as e:
             logger.error(f"Error reading Tongdy TG9: {e}")
