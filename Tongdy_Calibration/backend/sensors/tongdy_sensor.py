@@ -2,9 +2,11 @@ import logging
 import minimalmodbus
 import serial
 
+from .base import BaseSensor
+
 logger = logging.getLogger(__name__)
 
-class TongdySensor:
+class TongdySensor(BaseSensor):
     """
     Tongdy TG9 CO₂ / Temperature / Humidity via USB↔RS485 (Modbus RTU).
     Uses minimalmodbus for a simple RTU client.

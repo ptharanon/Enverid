@@ -7,6 +7,8 @@ DB_PATH = DATA_DIR / "sensors.db"
 
 db_queue = queue.Queue()
 
+
+######### DATABASE CURRENT_TIMESTAMP IS IN GMT+0 #########
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -23,16 +25,16 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sensor_id INTEGER NOT NULL,
         metric TEXT NOT NULL,              -- 'co2' | 'temperature' | 'humidity'
-        value REAL NOT NULL,
+        value FLOAT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     cur.execute("""
     CREATE TABLE IF NOT EXISTS calibration_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sensor_id INTEGER NOT NULL,
-        baseline_avg REAL,
-        exposure_avg REAL,
-        vented_avg REAL,
+        baseline_avg FLOAT,
+        exposure_avg FLOAT,
+        vented_avg FLOAT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.commit()

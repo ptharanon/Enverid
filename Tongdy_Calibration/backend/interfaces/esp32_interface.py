@@ -1,6 +1,13 @@
-import RPi.GPIO as GPIO
 import logging
 import time
+
+try:
+    import RPi.GPIO as GPIO
+    _HAS_GPIO = True
+except ImportError:
+    GIPO = None
+    _HAS_GPIO = False
+    print("Warning: RPi.GPIO not available; GPIO functions will be no-ops.")
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +19,9 @@ class ESP32Interface:
     """
 
     def __init__(self, gas_pin=23, vent_pin=24):
+        if not _HAS_GPIO:
+            raise RuntimeError("RPi.GPIO not available on this platform.")
+        
         self.gas_pin = gas_pin
         self.vent_pin = vent_pin
 

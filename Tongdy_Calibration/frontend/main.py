@@ -1,24 +1,37 @@
 from kivymd.app import MDApp
 from kivy.uix.screenmanager import ScreenManager
 from backend.db import init_db, start_db_worker, db_queue
-from backend.tongdy_sensor import TongdySensor
-from backend.esp32_interface import ESP32Interface
+
+from backend.sensors.tongdy_sensor import TongdySensor
+from backend.sensors.mock_sensor import MockSensor # for testing
+from backend.interfaces.esp32_interface import ESP32Interface
+from backend.interfaces.mock_esp32 import MockESP32Interface # for testing
+
 from backend.poller import SensorPoller
-from backend.calibration_controller import CalibrationController
+from backend.controller.calibration_controller import CalibrationController
 from .screens.dashboard import DashboardScreen
 from .screens.settings import SettingsScreen
 
 class App(MDApp):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.use_mock = True # for testing without hardware
+
     def build(self):
         # DB + worker
         init_db()
         self.db_thread = start_db_worker()
 
         # Hardware
-        self.sensor = TongdySensor(port="/dev/ttyUSB0", slave_address=1)  # adjust as needed
-        # Give it a consistent id so DB rows have a sensor_id
-        self.sensor.sensor_id = 1
-        self.esp32 = ESP32Interface()  # GPIO23,24 active-low
+        if self.use_mock:
+            self.sensor = MockSensor()
+            self.esp32 = MockESP32Interface(sensor=self.sensor)
+        else:
+            self.sensor = TongdySensor(port="/dev/ttyUSB0", slave_address=1)  # adjust as needed
+            # Give it a consistent id so DB rows have a sensor_id
+            self.sensor.sensor_id = 1
+            self.esp32 = ESP32Interface()  # GPIO23,24 active-low
+
 
         # Background services
         self.poller = SensorPoller(sensor=self.sensor, interval=60)

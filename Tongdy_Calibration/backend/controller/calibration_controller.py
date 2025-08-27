@@ -1,7 +1,7 @@
 import time, threading
 from statistics import mean
-from .ui_queue import ui_queue
-from .db import db_queue
+from ..ui_queue import ui_queue
+from ..db import db_queue
 
 class CalibrationController:
     """
@@ -26,8 +26,7 @@ class CalibrationController:
         self.struct = {"baseline": None, "exposure": None, "vented": None}
 
     def start(self):
-        if self.running:
-            return
+        if self.running: return
         self.running = True
         self.thread = threading.Thread(target=self._process, daemon=True)
         self.thread.start()
@@ -100,6 +99,7 @@ class CalibrationController:
 
             # 6) Save
             self._status("Saving calibration record")
+            print("Calibration result:", self.struct)
             db_queue.put({
                 "type": "calibration",
                 "sensor_id": getattr(self.sensor, "sensor_id", 1),
@@ -107,6 +107,7 @@ class CalibrationController:
                 "exposure": self.struct["exposure"],
                 "vented": self.struct["vented"],
             })
+            print("after db put")
             self._status("Calibration complete")
         finally:
             self.running = False
