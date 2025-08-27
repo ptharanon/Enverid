@@ -6,7 +6,8 @@ class MockSensor(BaseSensor):
     Simulates CO2/Temp/RH. Phase-aware so calibration makes sense:
       baseline ~ 450±30 ppm, exposure ~ 1500±100 ppm, vented ~ 600±50 ppm.
     """
-    def __init__(self):
+    def __init__(self, sensor_id):
+        super().__init__(sensor_id)
         self.phase = "baseline"
         self.t0 = time.time()
 

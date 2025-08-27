@@ -14,16 +14,16 @@ class CalibrationController:
     6) Save calibration record
     """
 
-    def __init__(self, sensor, esp32, sample_period_s=5):
+    def __init__(self, sensors, esp32, sample_period_s=5):
         self.TIME = 10 # debug timer 10s
-        self.TIME_UNIT = "seconds"  # or "minutes"
+        self.TIME_UNIT = "seconds"
 
-        self.sensor = sensor
+        self.sensors = sensors
         self.esp32 = esp32
         self.sample_period_s = sample_period_s
         self.running = False
         self.thread = None
-        self.struct = {"baseline": None, "exposure": None, "vented": None}
+        self.struct = {s.sensor_id: {"baseline": None, "exposure": None, "vented": None} for s in sensors}
 
     def start(self):
         if self.running: return
@@ -42,21 +42,22 @@ class CalibrationController:
     def _status(self, text: str):
         ui_queue.put({"type": "status", "text": text})
 
-    def _push_struct(self, key: str, value):
-        self.struct[key] = value
+    def _push_struct(self, key: str, results: dict):
+        print(f"CalibrationController: {key} results: {results}")
+        for sid, val in results.items():
+            self.struct[sid][key] = val
         ui_queue.put({"type": "struct_update", "struct": dict(self.struct)})
-
+    
     def _collect_avg(self, duration_s: int):
-        values = []
+        values = {s.sensor_id: [] for s in self.sensors}
         start = time.time()
         while self.running and (time.time() - start < duration_s):
-            v = (self.sensor.read_values() or {}).get("co2")
-            values.append(v)
-            if v is not None:
-                values.append(float(v))
-                ui_queue.put({"type": "sensor_value", "sensor_id": getattr(self.sensor, "sensor_id", 1), "value": v})
+            for s in self.sensors:
+                v = (s.read_values() or {}).get("co2")
+                if v is not None:
+                    values[s.sensor_id].append(float(v))
             time.sleep(self.sample_period_s)
-        return (mean(values) if values else None)
+        return {sid: (mean(vals) if vals else None) for sid, vals in values.items()}
 
     def _sleep_with_checks(self, duration_s: int):
         end = time.time() + duration_s
@@ -99,15 +100,14 @@ class CalibrationController:
 
             # 6) Save
             self._status("Saving calibration record")
-            print("Calibration result:", self.struct)
-            db_queue.put({
-                "type": "calibration",
-                "sensor_id": getattr(self.sensor, "sensor_id", 1),
-                "baseline": self.struct["baseline"],
-                "exposure": self.struct["exposure"],
-                "vented": self.struct["vented"],
-            })
-            print("after db put")
+            for sid, res in self.struct.items():
+                db_queue.put({
+                    "type": "calibration",
+                    "sensor_id": sid,
+                    "baseline": res["baseline"],
+                    "exposure": res["exposure"],
+                    "vented": res["vented"],
+                })
             self._status("Calibration complete")
         finally:
             self.running = False

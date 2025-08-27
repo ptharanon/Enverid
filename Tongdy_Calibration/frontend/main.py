@@ -24,8 +24,8 @@ class App(MDApp):
 
         # Hardware
         if self.use_mock:
-            self.sensor = MockSensor()
-            self.esp32 = MockESP32Interface(sensor=self.sensor)
+            self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
+            self.esp32 = MockESP32Interface(sensors=self.sensors)
         else:
             self.sensor = TongdySensor(port="/dev/ttyUSB0", slave_address=1)  # adjust as needed
             # Give it a consistent id so DB rows have a sensor_id
@@ -34,10 +34,10 @@ class App(MDApp):
 
 
         # Background services
-        self.poller = SensorPoller(sensor=self.sensor, interval=60)
+        self.poller = SensorPoller(sensors=self.sensors, interval=10)
         self.poller.start()
         # Calibration controller uses CO2 samples every 5s during windows
-        self.controller = CalibrationController(sensor=self.sensor, esp32=self.esp32, sample_period_s=5)
+        self.controller = CalibrationController(sensors=self.sensors, esp32=self.esp32, sample_period_s=5)
 
         # UI
         self.theme_cls.primary_palette = "Blue"
