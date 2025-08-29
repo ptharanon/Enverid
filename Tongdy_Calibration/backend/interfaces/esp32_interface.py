@@ -1,13 +1,31 @@
 import logging
 import time
 
+MODE = {
+    "GPIO" : "GPIO",
+    "REST" : "REST",
+    "MOCK" : "MOCK"
+}
+
+CURRENT_MODE = "REST"
+
 try:
-    import RPi.GPIO as GPIO
-    _HAS_GPIO = True
+    if CURRENT_MODE == MODE["GPIO"]:
+        import RPi.GPIO as GPIO
+        _HAS_GPIO = True
+    elif CURRENT_MODE == MODE["REST"]:
+        import requests
+        _HAS_REST = True
+    else:
+        GPIO = None
+        _HAS_GPIO = False
+        _HAS_REST = False
 except ImportError:
-    GIPO = None
+    GPIO = None
     _HAS_GPIO = False
+    _HAS_REST = False
     print("Warning: RPi.GPIO not available; GPIO functions will be no-ops.")
+    print("Warning: request no available; REST-API functions will be no-ops.")
 
 logger = logging.getLogger(__name__)
 

@@ -47,7 +47,6 @@ class App(MDApp):
         return sm
 
     def on_stop(self):
-        # Graceful shutdown
         try:
             self.poller.stop()
         except Exception:

@@ -59,15 +59,15 @@ class GraphImage(Image):
 
             msg = ""
             if nearest_1[0] is not None:
-                msg += f"Sensor 1\nTime: {nearest_1[0]:.1f}s\nCO₂: {nearest_1[1]:.0f} ppm\n\n"
+                msg += f"\nSensor 1\nTime: {nearest_1[0]:.1f}s\nCO²: {nearest_1[1]:.0f} ppm\n\n"
             if nearest_2[0] is not None:
-                msg += f"Sensor 2\nTime: {nearest_2[0]:.1f}s\nCO₂: {nearest_2[1]:.0f} ppm"
+                msg += f"Sensor 2\nTime: {nearest_2[0]:.1f}s\nCO²: {nearest_2[1]:.0f} ppm"
 
             if msg:
                 popup = Popup(title="Data Point",
                               content=Label(text=msg),
                               size_hint=(None,None),
-                              size=(dp(200), dp(180)))
+                              size=(dp(200), dp(220)))
                 popup.open()
             return True
         return super().on_touch_down(touch)
@@ -77,7 +77,9 @@ class DashboardScreen(Screen):
         super().__init__(**kwargs)
         self.controller = controller
 
-        self.scale = Window.height / 480.0
+        # --- Responsive scaling based on DPI ---
+        base_dpi = 96.0
+        self.scale = max(0.8, Window.dpi / base_dpi)
 
         app = MDApp.get_running_app()
         self.theme_cls = app.theme_cls
@@ -91,10 +93,11 @@ class DashboardScreen(Screen):
         scroll = MDScrollView(size_hint=(1, 1))
         content = MDBoxLayout(
             orientation="vertical",
-            spacing=dp(12*self.scale),
-            padding=dp(12*self.scale),
-            adaptive_height=True
+            spacing=dp(12),
+            padding=dp(12),
+            size_hint_y=None,
         )
+        content.bind(minimum_height=content.setter("height"))
         scroll.add_widget(content)
         self.add_widget(scroll)
 
@@ -102,14 +105,14 @@ class DashboardScreen(Screen):
         status_card = MDCard(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(50*self.scale),
-            padding=dp(8*self.scale),
-            radius=[12]*4,
+            height=dp(60),
+            padding=dp(8),
+            radius=[12] * 4,
             md_bg_color=self.theme_cls.bg_light
         )
         self.status_label = MDLabel(
             text="Status: Idle",
-            font_size=sp(16*self.scale),
+            font_size=sp(16),
             halign="center",
             theme_text_color="Primary"
         )
@@ -120,23 +123,23 @@ class DashboardScreen(Screen):
         graph_card = MDCard(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(220*self.scale),
-            padding=dp(6*self.scale),
-            radius=[12]*4,
+            height=dp(260),
+            padding=dp(6),
+            radius=[12] * 4,
             md_bg_color=self.theme_cls.bg_light
         )
 
-        self.fig, self.ax = plt.subplots(figsize=(6,3))
+        self.fig, self.ax = plt.subplots(figsize=(6, 3), dpi=100 * self.scale)
         self.line1, = self.ax.plot([], [], color='red', marker='o', label='Sensor 1')
         self.line2, = self.ax.plot([], [], color='blue', marker='o', label='Sensor 2')
         self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("CO₂ (ppm)")
+        self.ax.set_ylabel("CO² (ppm)")
         self.ax.set_xlim(0, 60)
         self.ax.set_ylim(0, 2000)
         self.ax.grid(True, alpha=0.3)
         self.ax.legend()
 
-        self.graph_widget = GraphImage(size_hint=(1,1))
+        self.graph_widget = GraphImage(size_hint=(1, 1))
         self.graph_widget.dashboard = self
         graph_card.add_widget(self.graph_widget)
         content.add_widget(graph_card)
@@ -145,26 +148,31 @@ class DashboardScreen(Screen):
         live_card = MDCard(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(150 * self.scale),
-            padding=dp(6 * self.scale),
-            radius=[12, 12, 12, 12],
+            height=dp(180),
+            padding=dp(6),
+            radius=[12] * 4,
             md_bg_color=self.theme_cls.bg_light,
         )
-        live_card.add_widget(MDLabel(text="Live Readings", halign="center", font_style="H6"))
+        live_card.add_widget(MDLabel(
+            text="Live Readings",
+            halign="center",
+            font_style="H6"
+        ))
 
         live_layout = GridLayout(
-            cols=2, 
-            spacing=dp(40 * self.scale), 
+            cols=2,
+            spacing=dp(40),
             size_hint_y=None,
-            padding=[dp(40 * self.scale), 0]
+            height=dp(120),
+            padding=[dp(40), 0]
         )
-        live_layout.bind(minimum_height=live_layout.setter("height"))
 
         def build_sensor_live(title):
-            layout = MDBoxLayout(orientation="vertical", spacing=dp(4 * self.scale),
-                                 size_hint_x=None, width=dp(220 * self.scale))
-            layout.add_widget(MDLabel(text=f"[b]{title}[/b]", markup=True, halign="center", font_size="18sp"))
-            grid = GridLayout(cols=2, spacing=dp(6 * self.scale))
+            layout = MDBoxLayout(orientation="vertical", spacing=dp(4),
+                                 size_hint_x=None, width=dp(220))
+            layout.add_widget(MDLabel(text=f"[b]{title}[/b]", markup=True,
+                                      halign="center", font_size=sp(18)))
+            grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None, height=dp(80))
             lbl_co2 = MDLabel(text="CO²:", halign="right")
             val_co2 = MDLabel(text="-- ppm", halign="left")
             lbl_temp = MDLabel(text="Temp:", halign="right")
@@ -177,48 +185,77 @@ class DashboardScreen(Screen):
             layout.add_widget(grid)
             return layout, val_co2, val_temp, val_rh
 
-        sensor1_live, self.lbl1_co2, self.lbl1_temp, self.lbl1_rh = build_sensor_live("Sensor 1 Live")
-        sensor2_live, self.lbl2_co2, self.lbl2_temp, self.lbl2_rh = build_sensor_live("Sensor 2 Live")
+        sensor1_layout, self.lbl1_co2, self.lbl1_temp, self.lbl1_rh = build_sensor_live("Sensor 1")
+        sensor2_layout, self.lbl2_co2, self.lbl2_temp, self.lbl2_rh = build_sensor_live("Sensor 2")
+        live_layout.add_widget(sensor1_layout)
+        live_layout.add_widget(sensor2_layout)
 
-        live_layout.add_widget(sensor1_live)
-        live_layout.add_widget(sensor2_live)
         live_card.add_widget(live_layout)
         content.add_widget(live_card)
 
         # ---------------- Calibration Card ----------------
         calib_card = MDCard(
             orientation="vertical",
-            padding=dp(10*self.scale),
             size_hint=(1, None),
-            height=dp(180*self.scale),
-            radius=[12]*4,
-            md_bg_color=self.theme_cls.bg_light
+            height=dp(220),
+            padding=dp(12),
+            radius=[12] * 4,
+            md_bg_color=self.theme_cls.bg_light,
         )
-        calib_card.add_widget(MDLabel(text="Calibration Averages (CO²)", halign="center", font_style="H6"))
+
+        calib_card.add_widget(MDLabel(
+            text="Calibration Averages (CO²)",
+            halign="center",
+            font_style="H6",
+            size_hint_y=None,
+            height=dp(32),
+        ))
+
         calib_layout = GridLayout(
             cols=2,
-            spacing=dp(40 * self.scale),
-            padding=[dp(40 * self.scale), 0],
+            spacing=dp(40),
             size_hint_y=None,
+            height=dp(160),
+            padding=[dp(40), 0]
         )
-        calib_layout.bind(minimum_height=calib_layout.setter("height"))
 
+        # helper to build calibration block
         def build_sensor_calib(title):
-            layout = MDBoxLayout(orientation="vertical", spacing=dp(4 * self.scale),
-                                 size_hint_x=None, width=dp(220 * self.scale))
-            layout.add_widget(MDLabel(text=f"[b]{title}[/b]", markup=True, halign="center", font_size="18sp"))
-            grid = GridLayout(cols=2, spacing=dp(6 * self.scale))
-            lbl_base = MDLabel(text="Baseline:", halign="right")
-            val_base = MDLabel(text="--", halign="left")
-            lbl_exp = MDLabel(text="Exposure:", halign="right")
-            val_exp = MDLabel(text="--", halign="left")
-            lbl_vent = MDLabel(text="Post-vent:", halign="right")
-            val_vent = MDLabel(text="--", halign="left")
-            grid.add_widget(lbl_base); grid.add_widget(val_base)
-            grid.add_widget(lbl_exp); grid.add_widget(val_exp)
-            grid.add_widget(lbl_vent); grid.add_widget(val_vent)
+            layout = MDBoxLayout(
+                orientation="vertical",
+                spacing=dp(6),
+                size_hint_x=None,
+                width=dp(220),
+            )
+            layout.add_widget(MDLabel(
+                text=f"[b]{title}[/b]",
+                markup=True,
+                halign="center",
+                font_size=sp(16),
+                size_hint_y=None,
+                height=dp(30),
+            ))
+
+            grid = GridLayout(
+                cols=2,
+                spacing=dp(6),
+                size_hint_y=None,
+                height=dp(100)
+            )
+
+            lbl_baseline = MDLabel(text="Baseline:", halign="right")
+            val_baseline = MDLabel(text="-- ppm", halign="left")
+            lbl_exposure = MDLabel(text="Exposure:", halign="right")
+            val_exposure = MDLabel(text="-- ppm", halign="left")
+            lbl_post = MDLabel(text="Post-vent:", halign="right")
+            val_post = MDLabel(text="-- ppm", halign="left")
+
+            grid.add_widget(lbl_baseline); grid.add_widget(val_baseline)
+            grid.add_widget(lbl_exposure); grid.add_widget(val_exposure)
+            grid.add_widget(lbl_post); grid.add_widget(val_post)
             layout.add_widget(grid)
-            return layout, val_base, val_exp, val_vent
+
+            return layout, val_baseline, val_exposure, val_post
 
         sensor1_calib, self.lbl1_baseline, self.lbl1_exposure, self.lbl1_vented = build_sensor_calib("Sensor 1 Calibration")
         sensor2_calib, self.lbl2_baseline, self.lbl2_exposure, self.lbl2_vented = build_sensor_calib("Sensor 2 Calibration")
@@ -229,7 +266,12 @@ class DashboardScreen(Screen):
         content.add_widget(calib_card)
 
         # ---------------- Buttons ----------------
-        btn_row = BoxLayout(orientation="horizontal", size_hint=(1, None), height=dp(70*self.scale), spacing=dp(20*self.scale))
+        btn_row = BoxLayout(
+            orientation="horizontal",
+            size_hint=(1, None),
+            height=dp(70),
+            spacing=dp(20)
+        )
         btn_row.add_widget(MDRectangleFlatButton(text="Start", on_release=self.on_start))
         btn_row.add_widget(MDRectangleFlatButton(text="Stop", on_release=self.on_stop))
         content.add_widget(btn_row)
