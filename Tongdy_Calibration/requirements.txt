@@ -6,3 +6,5 @@ pyserial
 minimalmodbus
 kivy-garden
 kivy-garden.graph
+flask
+matplotlib

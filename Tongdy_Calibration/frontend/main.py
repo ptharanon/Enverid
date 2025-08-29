@@ -4,7 +4,7 @@ from backend.db import init_db, start_db_worker, db_queue
 
 from backend.sensors.tongdy_sensor import TongdySensor
 from backend.sensors.mock_sensor import MockSensor # for testing
-from backend.interfaces.esp32_interface import ESP32Interface
+from backend.interfaces.esp32_interface import get_esp32_interface as ESP32Interface
 from backend.interfaces.mock_esp32 import MockESP32Interface # for testing
 
 from backend.poller import SensorPoller
@@ -25,12 +25,14 @@ class App(MDApp):
         # Hardware
         if self.use_mock:
             self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
-            self.esp32 = MockESP32Interface(sensors=self.sensors)
+            self.esp32 = ESP32Interface(mode="REST", sensors=self.sensors)  # mock ESP32 interface
         else:
             self.sensor = TongdySensor(port="/dev/ttyUSB0", slave_address=1)  # adjust as needed
             # Give it a consistent id so DB rows have a sensor_id
-            self.sensor.sensor_id = 1
-            self.esp32 = ESP32Interface()  # GPIO23,24 active-low
+            self.sensor.sensor_id = 1 # hardcoded for now
+            self.sensors = [self.sensor]
+            # Hardcoded for now, adjust as needed (REST or GPIO)
+            self.esp32 = ESP32Interface("REST") # or "GPIO"
 
 
         # Background services

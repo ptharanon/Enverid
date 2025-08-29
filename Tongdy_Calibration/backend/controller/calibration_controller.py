@@ -43,7 +43,7 @@ class CalibrationController:
         ui_queue.put({"type": "status", "text": text})
 
     def _push_struct(self, key: str, results: dict):
-        print(f"CalibrationController: {key} results: {results}")
+        # print(f"CalibrationController: {key} results: {results}")
         for sid, val in results.items():
             self.struct[sid][key] = val
         ui_queue.put({"type": "struct_update", "struct": dict(self.struct)})
@@ -76,7 +76,7 @@ class CalibrationController:
             self._status(f"Injecting calibration gas ({self.TIME} {self.TIME_UNIT})")
             self.esp32.start_gas()
             self._sleep_with_checks(self.TIME)
-            self.esp32.stop()
+            self.esp32.stop_gas()
             if not self.running: return
 
             # 3) Exposure measurement
@@ -89,7 +89,7 @@ class CalibrationController:
             self._status(f"Venting ({self.TIME} {self.TIME_UNIT})")
             self.esp32.vent()
             self._sleep_with_checks(self.TIME)
-            self.esp32.stop()
+            self.esp32.vent_off()
             if not self.running: return
 
             # 5) Post-vent measurement
@@ -114,6 +114,7 @@ class CalibrationController:
             # Fail-safe: ensure all outputs are off
             try:
                 self.esp32.stop()
+                self.esp32.cleanup()
             except Exception:
                 pass
 

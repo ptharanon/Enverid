@@ -363,10 +363,10 @@ class DashboardScreen(Screen):
 
             elif t == "struct_update":
                 s = msg["struct"]
-                print("Struct update:", s)
+                # print("Struct update:", s)
 
                 for sid, val in s.items():
-                    print(f"  Sensor {sid}: {val}")
+                    # print(f"  Sensor {sid}: {val}")
                     baseline_val = "--" if val['baseline'] is None else f"{val['baseline']:.2f}"
                     exposure_val = "--" if val['exposure'] is None else f"{val['exposure']:.2f}"
                     vented_val = "--" if val['vented'] is None else f"{val['vented']:.2f}"
