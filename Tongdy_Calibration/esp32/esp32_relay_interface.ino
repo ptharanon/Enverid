@@ -1,0 +1,208 @@
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+
+// -----------------------------
+// Network Config (Static IP)
+// -----------------------------
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+
+// Fixed IP: 192.168.1.99
+IPAddress local_IP(192, 168, 1, 99);
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress dns1(8, 8, 8, 8);
+
+// -----------------------------
+// Web Server
+// -----------------------------
+AsyncWebServer server(80);
+
+// -----------------------------
+// Command Queue (Async execution)
+// -----------------------------
+enum class CommandType : uint8_t {
+  START_GAS,
+  STOP_GAS,
+  START_VENT,
+  STOP_VENT,
+  STOP_ALL,
+  CLEANUP
+};
+
+struct Command {
+  CommandType type;
+};
+
+QueueHandle_t cmdQueue;
+
+// -----------------------------
+// Utility: JSON 200 OK response
+// -----------------------------
+void sendOkJson(AsyncWebServerRequest* request, const char* command) {
+  AsyncResponseStream* res = request->beginResponseStream("application/json");
+  res->addHeader("Cache-Control", "no-store");
+  res->addHeader("Access-Control-Allow-Origin", "*");
+  // Minimal JSON; add more fields if needed
+  res->print("{\"status\":\"ok\",\"command\":\"");
+  res->print(command);
+  res->print("\"}");
+  request->send(res);
+}
+
+// Send a simple JSON error with custom code
+void sendErrorJson(AsyncWebServerRequest* request, uint16_t code, const char* message) {
+  AsyncResponseStream* res = request->beginResponseStream("application/json");
+  res->addHeader("Cache-Control", "no-store");
+  res->addHeader("Access-Control-Allow-Origin", "*");
+  res->print("{\"status\":\"error\",\"message\":\"");
+  res->print(message);
+  res->print("\"}");
+  res->setCode(code);
+  request->send(res);
+}
+
+// Try to enqueue a command; return true if queued
+bool enqueueCommand(CommandType t) {
+  Command cmd{ t };
+  return xQueueSend(cmdQueue, &cmd, 0) == pdTRUE;
+}
+
+// -----------------------------
+// Internal Command Handlers (stubs)
+// Fill these later with actual GPIO/relay logic
+// -----------------------------
+void handleStartGas()   { Serial.println("[CMD] start_gas");   /* TODO */ }
+void handleStopGas()    { Serial.println("[CMD] stop_gas");    /* TODO */ }
+void handleStartVent()  { Serial.println("[CMD] start_vent");  /* TODO */ }
+void handleStopVent()   { Serial.println("[CMD] stop_vent");   /* TODO */ }
+void handleStopAll()    { Serial.println("[CMD] stop");        /* TODO */ }
+void handleCleanup()    { Serial.println("[CMD] cleanup");     /* TODO */ }
+
+// Worker task: consumes queued commands asynchronously
+void commandWorker(void* pv) {
+  Command cmd;
+  for (;;) {
+    if (xQueueReceive(cmdQueue, &cmd, portMAX_DELAY) == pdTRUE) {
+      switch (cmd.type) {
+        case CommandType::START_GAS:  handleStartGas();  break;
+        case CommandType::STOP_GAS:   handleStopGas();   break;
+        case CommandType::START_VENT: handleStartVent(); break;
+        case CommandType::STOP_VENT:  handleStopVent();  break;
+        case CommandType::STOP_ALL:   handleStopAll();   break;
+        case CommandType::CLEANUP:    handleCleanup();   break;
+      }
+    }
+  }
+}
+
+// -----------------------------
+// Routes
+// -----------------------------
+void registerRoutes() {
+  // Health check
+  server.on("/health", HTTP_GET, [](AsyncWebServerRequest* request) {
+    sendOkJson(request, "health");
+  });
+
+  // Exact REST endpoints your Pi calls:
+  server.on("/command/start_gas", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (enqueueCommand(CommandType::START_GAS)) sendOkJson(request, "start_gas");
+    else sendErrorJson(request, 503, "queue_full");
+  });
+
+  server.on("/command/stop_gas", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (enqueueCommand(CommandType::STOP_GAS)) sendOkJson(request, "stop_gas");
+    else sendErrorJson(request, 503, "queue_full");
+  });
+
+  server.on("/command/start_vent", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (enqueueCommand(CommandType::START_VENT)) sendOkJson(request, "start_vent");
+    else sendErrorJson(request, 503, "queue_full");
+  });
+
+  server.on("/command/stop_vent", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (enqueueCommand(CommandType::STOP_VENT)) sendOkJson(request, "stop_vent");
+    else sendErrorJson(request, 503, "queue_full");
+  });
+
+  server.on("/command/stop", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (enqueueCommand(CommandType::STOP_ALL)) sendOkJson(request, "stop");
+    else sendErrorJson(request, 503, "queue_full");
+  });
+
+  server.on("/command/cleanup", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (enqueueCommand(CommandType::CLEANUP)) sendOkJson(request, "cleanup");
+    else sendErrorJson(request, 503, "queue_full");
+  });
+
+  // Fallback 404
+  server.onNotFound([](AsyncWebServerRequest* request) {
+    sendErrorJson(request, 404, "not_found");
+  });
+}
+
+// -----------------------------
+// Wi-Fi Connect (non-blocking-ish)
+// -----------------------------
+bool connectWiFi() {
+  Serial.print("Configuring static IP... ");
+  if (!WiFi.config(local_IP, gateway, subnet, dns1)) {
+    Serial.println("FAILED (WiFi.config).");
+    return false;
+  }
+  Serial.println("OK");
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to WiFi");
+  const uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < 15000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connected. IP: ");
+    Serial.println(WiFi.localIP());
+    return true;
+  } else {
+    Serial.println("WiFi connect timeout.");
+    return false;
+  }
+}
+
+// -----------------------------
+// Arduino Setup/Loop
+// -----------------------------
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  // Create command queue
+  cmdQueue = xQueueCreate(10, sizeof(Command));
+  if (!cmdQueue) {
+    Serial.println("FATAL: Failed to create command queue");
+    for(;;) delay(1000);
+  }
+
+  // Start worker task on core 1
+  xTaskCreatePinnedToCore(
+    commandWorker, "cmd_worker", 4096, nullptr, 1, nullptr, 1
+  );
+
+  if (!connectWiFi()) {
+    // Even if WiFi fails, keep running; you may add retries/timers if desired.
+    Serial.println("WARNING: WiFi not connected. Server will start anyway (won't be reachable).");
+  }
+
+  registerRoutes();
+  server.begin();
+  Serial.println("Async server started on http://192.168.1.99");
+}
+
+void loop() {
+  // Nothing to do — everything is async.
+}
