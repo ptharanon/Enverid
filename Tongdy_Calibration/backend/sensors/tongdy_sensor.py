@@ -12,13 +12,16 @@ class TongdySensor(BaseSensor):
     Uses minimalmodbus for a simple RTU client.
     """
 
-    def __init__(self, port="/dev/ttyUSB0", slave_address=1, baudrate=9600, timeout=1.5):
+    def __init__(self, port="/dev/ttyUSB0", sensor_id=1, slave_address=1, baudrate=9600, timeout=1.5):
         """
         :param port: Serial device, e.g. /dev/ttyUSB0
         :param slave_address: Modbus address set on the TG9
         :param baudrate: Usually 9600 (check device)
         :param timeout: Serial timeout in seconds
         """
+        
+        super().__init__(sensor_id)
+
         try:
             self.instrument = minimalmodbus.Instrument(port, slave_address)
             self.instrument.serial.baudrate = baudrate
