@@ -19,8 +19,9 @@ class TongdySensor(BaseSensor):
         :param baudrate: Usually 9600 (check device)
         :param timeout: Serial timeout in seconds
         """
-        
+
         super().__init__(sensor_id)
+        self.phase = "baseline"  # default phase
 
         try:
             self.instrument = minimalmodbus.Instrument(port, slave_address)
@@ -34,6 +35,9 @@ class TongdySensor(BaseSensor):
         except Exception as e:
             logger.exception("Failed to initialize TongdySensor:")
             self.instrument = None
+
+    def set_phase(self, phase: str):
+        self.phase = phase
 
     def read_values(self):
         """
