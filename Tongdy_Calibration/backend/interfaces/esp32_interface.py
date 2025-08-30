@@ -106,7 +106,7 @@ class GPIOESP32Interface(BaseESP32Interface):
 
 class RestESP32Interface(BaseESP32Interface):
     """ REST API based relay control. """
-    def __init__(self, sensors=None, target_ip_address="http://192.168.1.33:5000"):
+    def __init__(self, sensors=None, target_ip_address="http://192.168.1.99"):
         if not _HAS_REST:
             raise RuntimeError("requests not available on this platform.")
 

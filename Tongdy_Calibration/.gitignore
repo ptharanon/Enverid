@@ -4,6 +4,7 @@ env/
 venv/
 pyvenv.cfg
 data/
+Tongdy_Calibration/data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
