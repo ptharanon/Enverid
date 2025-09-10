@@ -136,6 +136,14 @@ class RestESP32Interface(BaseESP32Interface):
         self._retry_command(lambda: self._send_command("stop_gas"))
         self._set_phase_all("exposure")
 
+    def start_circulation(self):
+        self._retry_command(lambda: self._send_command("start_circulation"))
+        self._set_phase_all("circulating")
+    
+    def stop_circulation(self):
+        self._retry_command(lambda: self._send_command("stop_circulation"))
+        self._set_phase_all("exposure")
+
     def vent(self): 
         self._retry_command(lambda: self._send_command("start_vent"))
         self._set_phase_all("vented")
@@ -160,6 +168,8 @@ class MockESP32Interface(BaseESP32Interface):
 
     def start_gas(self): print("MOCK: start_gas()")
     def stop_gas(self): print("MOCK: stop_gas()")
+    def start_circulation(self): print("MOCK: start_circulation()")
+    def stop_circulation(self): print("MOCK: stop_circulation()")
     def vent(self): print("MOCK: vent()")
     def vent_off(self): print("MOCK: vent_off()")
     def stop(self): print("MOCK: stop()")

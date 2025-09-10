@@ -17,6 +17,11 @@ class MockESP32Interface:
 
     def stop_gas(self): print("[MOCK] Gas OFF")
 
+    def start_circulation(self): 
+        print("[MOCK] Circulation ON")
+
+    def stop_circulation(self): print("[MOCK] Circulation OFF")
+
     def vent(self):
         print("[MOCK] Vent ON")
         self._set_phase_all("vented")

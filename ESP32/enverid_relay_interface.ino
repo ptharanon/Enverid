@@ -8,7 +8,6 @@
 const char* WIFI_SSID     = "TP-Link_33FE";
 const char* WIFI_PASSWORD = "82250805";
 
-// Fixed IP: 192.168.1.99
 IPAddress local_IP(192, 168, 1, 99);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
@@ -42,9 +41,9 @@ QueueHandle_t cmdQueue;
 // -----------------------------
 // Relay GPIOs (Active HIGH)
 // -----------------------------
-constexpr int PIN_CIRCULATION = 17;  // circulation fan # Real Pin 18
+constexpr int PIN_CIRCULATION = 17;  // circulation fan
 constexpr int PIN_GAS         = 19;  // gas solenoid valve
-constexpr int PIN_VENT        = 18;  // vent fan # Real pin 17
+constexpr int PIN_VENT        = 18;  // vent fan 
 
 inline void relayOn(int pin)  { digitalWrite(pin, HIGH);  }
 inline void relayOff(int pin) { digitalWrite(pin, LOW); }
@@ -56,14 +55,12 @@ void sendOkJson(AsyncWebServerRequest* request, const char* command) {
   AsyncResponseStream* res = request->beginResponseStream("application/json");
   res->addHeader("Cache-Control", "no-store");
   res->addHeader("Access-Control-Allow-Origin", "*");
-  // Minimal JSON; add more fields if needed
   res->print("{\"status\":\"ok\",\"command\":\"");
   res->print(command);
   res->print("\"}");
   request->send(res);
 }
 
-// Send a simple JSON error with custom code
 void sendErrorJson(AsyncWebServerRequest* request, uint16_t code, const char* message) {
   AsyncResponseStream* res = request->beginResponseStream("application/json");
   res->addHeader("Cache-Control", "no-store");
@@ -75,15 +72,13 @@ void sendErrorJson(AsyncWebServerRequest* request, uint16_t code, const char* me
   request->send(res);
 }
 
-// Try to enqueue a command; return true if queued
 bool enqueueCommand(CommandType t) {
   Command cmd{ t };
   return xQueueSend(cmdQueue, &cmd, 0) == pdTRUE;
 }
 
 // -----------------------------
-// Internal Command Handlers (stubs)
-// Fill these later with actual GPIO/relay logic
+// Command Handlers
 // -----------------------------
 void handleStartGas() {
   Serial.println("[CMD] start_gas");
@@ -133,6 +128,8 @@ void commandWorker(void* pv) {
       switch (cmd.type) {
         case CommandType::START_GAS:  handleStartGas();  break;
         case CommandType::STOP_GAS:   handleStopGas();   break;
+        case CommandType::START_CIRCULATION: handleStartCirculation(); break;
+        case CommandType::STOP_CIRCULATION:  handleStopCirculation();  break;
         case CommandType::START_VENT: handleStartVent(); break;
         case CommandType::STOP_VENT:  handleStopVent();  break;
         case CommandType::STOP_ALL:   handleStopAll();   break;
@@ -146,12 +143,10 @@ void commandWorker(void* pv) {
 // Routes
 // -----------------------------
 void registerRoutes() {
-  // Health check
   server.on("/health", HTTP_GET, [](AsyncWebServerRequest* request) {
     sendOkJson(request, "health");
   });
 
-  // Exact REST endpoints your Pi calls:
   server.on("/command/start_gas", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (enqueueCommand(CommandType::START_GAS)) sendOkJson(request, "start_gas");
     else sendErrorJson(request, 503, "queue_full");
@@ -192,14 +187,13 @@ void registerRoutes() {
     else sendErrorJson(request, 503, "queue_full");
   });
 
-  // Fallback 404
   server.onNotFound([](AsyncWebServerRequest* request) {
     sendErrorJson(request, 404, "not_found");
   });
 }
 
 // -----------------------------
-// Wi-Fi Connect (non-blocking-ish)
+// Wi-Fi Connection
 // -----------------------------
 bool connectWiFi() {
   Serial.print("Configuring static IP... ");
@@ -230,7 +224,7 @@ bool connectWiFi() {
 }
 
 // -----------------------------
-// Arduino Setup/Loop
+// Setup & Loop
 // -----------------------------
 void setup() {
   Serial.begin(115200);
@@ -240,8 +234,7 @@ void setup() {
   pinMode(PIN_CIRCULATION, OUTPUT);
   pinMode(PIN_GAS, OUTPUT);
   pinMode(PIN_VENT, OUTPUT);
-  // Set all OFF at boot (active LOW, so HIGH = OFF)
-  // Actually active HIGH?
+
   relayOff(PIN_CIRCULATION);
   relayOff(PIN_GAS);
   relayOff(PIN_VENT);
@@ -262,7 +255,6 @@ void setup() {
   );
 
   if (!connectWiFi()) {
-    // Even if WiFi fails, keep running; you may add retries/timers if desired.
     Serial.println("WARNING: WiFi not connected. Server will start anyway (won't be reachable).");
   }
 

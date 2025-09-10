@@ -77,6 +77,7 @@ class CalibrationController:
             self.esp32.start_gas()
             self._sleep_with_checks(self.TIME)
             self.esp32.stop_gas()
+            self.esp32.start_circulation()  # start circulation after gas injection
             if not self.running: return
 
             # 3) Exposure measurement
@@ -87,6 +88,7 @@ class CalibrationController:
 
             # 4) Vent
             self._status(f"Venting ({self.TIME} {self.TIME_UNIT})")
+            self.esp32.stop_circulation()  # stop circulation before venting
             self.esp32.vent()
             self._sleep_with_checks(self.TIME)
             self.esp32.vent_off()
