@@ -120,4 +120,25 @@ class CalibrationController:
             except Exception:
                 pass
 
+        def manual_start_gas(self):
+            self.esp32.start_gas()
+
+        def manual_stop_gas(self):
+            self.esp32.stop_gas()
+        
+        def manual_start_circulation(self):
+            self.esp32.start_circulation()
+
+        def manual_stop_circulation(self):
+            self.esp32.stop_circulation()
+
+        def manual_vent(self):
+            self.esp32.vent()
+        
+        def manual_vent_off(self):
+            self.esp32.vent_off()
+        
+        def manual_stop_all(self):
+            self.esp32.stop()
+
 # Exhaust + Motorize in/out added

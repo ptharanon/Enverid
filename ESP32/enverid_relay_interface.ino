@@ -41,7 +41,7 @@ QueueHandle_t cmdQueue;
 // -----------------------------
 // Relay GPIOs (Active HIGH)
 // -----------------------------
-constexpr int PIN_CIRCULATION = 17;  // circulation fan
+constexpr int PIN_CIRCULATION = 21;  // circulation fan
 constexpr int PIN_GAS         = 19;  // gas solenoid valve
 constexpr int PIN_VENT        = 18;  // vent fan 
 

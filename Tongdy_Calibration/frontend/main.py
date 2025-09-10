@@ -15,7 +15,7 @@ from .screens.settings import SettingsScreen
 class App(MDApp):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.use_mock = True # for testing without hardware
+        self.use_mock = False # for testing without hardware
 
     def build(self):
         # DB + worker
@@ -27,7 +27,7 @@ class App(MDApp):
             self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
             self.esp32 = ESP32Interface(mode="", sensors=self.sensors)  # mock ESP32 interface
         else:
-            # self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
+            self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
             self.sensors = [TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=1, slave_address=1, is_VOC=True),
                             TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=2, slave_address=10, is_VOC=False)]  # adjust as needed
             # Give it a consistent id so DB rows have a sensor_id

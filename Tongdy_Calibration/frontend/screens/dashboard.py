@@ -274,6 +274,16 @@ class DashboardScreen(Screen):
         )
         btn_row.add_widget(MDRectangleFlatButton(text="Start", on_release=self.on_start))
         btn_row.add_widget(MDRectangleFlatButton(text="Stop", on_release=self.on_stop))
+        
+        self.gas_control_btn = MDRectangleFlatButton(text="Start Gas", on_release=self._gas_control)
+        self.ventilation_control_btn = MDRectangleFlatButton(text="Start Circulation", on_release=self._ventilation_control)
+        self.vent_control_btn = MDRectangleFlatButton(text="Start Vent", on_release=self._vent_control)
+        self.stop_all_control_btn = MDRectangleFlatButton(text="Stop All", on_release=self._stop_all_control)
+
+        btn_row.add_widget(self.gas_control_btn)
+        btn_row.add_widget(self.ventilation_control_btn)
+        btn_row.add_widget(self.vent_control_btn)
+        btn_row.add_widget(self.stop_all_control_btn)
         content.add_widget(btn_row)
 
         # Schedule UI refresh
@@ -288,6 +298,47 @@ class DashboardScreen(Screen):
         if self.controller.running:
             self.controller.stop()
             self.status_label.text = "Status: Stopping..."
+
+    def _gas_control(self, *_):
+        if not self.controller.running:
+            if self.gas_control_btn.text == "Start Gas":
+                self.controller.esp32.start_gas()
+                self.status_label.text = "Status: Gas ON"
+                self.gas_control_btn.text = "Stop Gas"
+            else:
+                self.controller.esp32.stop_gas()
+                self.status_label.text = "Status: Idle"
+                self.gas_control_btn.text = "Start Gas"
+    
+    def _ventilation_control(self, *_):
+        if not self.controller.running:
+            if self.ventilation_control_btn.text == "Start Circulation":
+                self.controller.esp32.start_circulation()
+                self.status_label.text = "Status: Circulation ON"
+                self.ventilation_control_btn.text = "Stop Circulation"
+            else:
+                self.controller.esp32.stop_circulation()
+                self.status_label.text = "Status: Idle"
+                self.ventilation_control_btn.text = "Start Circulation"
+    
+    def _vent_control(self, *_):  
+        if not self.controller.running:
+            if self.vent_control_btn.text == "Start Vent":
+                self.controller.esp32.vent()
+                self.status_label.text = "Status: Vent ON"
+                self.vent_control_btn.text = "Stop Vent"
+            else:
+                self.controller.esp32.vent_off()
+                self.status_label.text = "Status: Idle"
+                self.vent_control_btn.text = "Start Vent"
+    
+    def _stop_all_control(self, *_):
+        if not self.controller.running:
+            self.controller.esp32.stop()
+            self.status_label.text = "Status: Idle"
+            self.gas_control_btn.text = "Start Gas"
+            self.ventilation_control_btn.text = "Start Circulation"
+            self.vent_control_btn.text = "Start Vent"
 
     # ---------------- Update Graph ----------------
     def _update_graph_image(self):
