@@ -35,6 +35,7 @@ def init_db():
         baseline_avg FLOAT,
         exposure_avg FLOAT,
         vented_avg FLOAT,
+        injection_time_s INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.commit()
@@ -55,13 +56,13 @@ def _insert_sensor_data_batch(readings):
     conn.commit()
     conn.close()
 
-def _insert_calibration_record(sensor_id, baseline, exposure, vented):
+def _insert_calibration_record(sensor_id, baseline, exposure, vented, injection_time_s):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO calibration_sessions (sensor_id, baseline_avg, exposure_avg, vented_avg)
-        VALUES (?, ?, ?, ?)
-    """, (sensor_id, baseline, exposure, vented))
+        INSERT INTO calibration_sessions (sensor_id, baseline_avg, exposure_avg, vented_avg, injection_time_s)
+        VALUES (?, ?, ?, ?, ?)
+    """, (sensor_id, baseline, exposure, vented, injection_time_s))
     conn.commit()
     conn.close()
 
@@ -75,7 +76,11 @@ def db_worker():
                 _insert_sensor_data_batch(msg["readings"])
             elif msg["type"] == "calibration":
                 _insert_calibration_record(
-                    msg["sensor_id"], msg["baseline"], msg["exposure"], msg["vented"]
+                    msg["sensor_id"], 
+                    msg["baseline"], 
+                    msg["exposure"], 
+                    msg["vented"],
+                    msg["injection_time_s"]
                 )
         finally:
             db_queue.task_done()

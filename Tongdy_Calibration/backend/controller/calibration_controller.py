@@ -17,9 +17,9 @@ class CalibrationController:
     def __init__(self, sensors, esp32, sample_period_s=5):
         self.TIME = 10 # debug timer 10s
 
-        self.TIME_GAS_INJECTION = 3
-        self.TIME_VENT = 600
-        self.TIME_GET_AVG = 300
+        self.TIME_GAS_INJECTION = 9
+        self.TIME_VENT = 660
+        self.TIME_GET_AVG = 240
 
         self.TIME_UNIT = "seconds"
 
@@ -72,13 +72,13 @@ class CalibrationController:
     def _process(self):
         try:
             # 1) Baseline
-            self._status(f"Collecting baseline ({self.TIME} {self.TIME_UNIT})")
+            self._status(f"Collecting baseline ({self.TIME_GET_AVG} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME_GET_AVG)
             self._push_struct("baseline", avg)
             if not self.running: return
 
             # 2) Gas injection hold
-            self._status(f"Injecting calibration gas ({self.TIME} {self.TIME_UNIT})")
+            self._status(f"Injecting calibration gas ({self.TIME_GAS_INJECTION} {self.TIME_UNIT})")
             self.esp32.start_gas()
             self.esp32.start_circulation()
             self._sleep_with_checks(self.TIME_GAS_INJECTION)            
@@ -86,20 +86,20 @@ class CalibrationController:
             if not self.running: return
 
             # 3) Exposure measurement
-            self._status(f"Collecting exposure ({self.TIME} {self.TIME_UNIT})")
+            self._status(f"Collecting exposure ({self.TIME_GET_AVG} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME_GET_AVG)
             self._push_struct("exposure", avg)
             if not self.running: return
 
             # 4) Vent
-            self._status(f"Venting ({self.TIME} {self.TIME_UNIT})")
+            self._status(f"Venting ({self.TIME_VENT} {self.TIME_UNIT})")
             self.esp32.vent()
             self._sleep_with_checks(self.TIME_VENT)
             self.esp32.vent_off()
             if not self.running: return
 
             # 5) Post-vent measurement
-            self._status(f"Collecting post-vent ({self.TIME} {self.TIME_UNIT})")
+            self._status(f"Collecting post-vent ({self.TIME_GET_AVG} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME_GET_AVG)
             self.esp32.stop_circulation()
             self._push_struct("vented", avg)
@@ -114,6 +114,7 @@ class CalibrationController:
                     "baseline": res["baseline"],
                     "exposure": res["exposure"],
                     "vented": res["vented"],
+                    "injection_time_s": self.TIME_GAS_INJECTION,
                 })
             self._status("Calibration complete")
         finally:
