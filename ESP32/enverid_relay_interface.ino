@@ -5,8 +5,10 @@
 // -----------------------------
 // Network Config (Static IP)
 // -----------------------------
-const char* WIFI_SSID     = "TP-Link_33FE";
-const char* WIFI_PASSWORD = "82250805";
+// const char* WIFI_SSID     = "TP-Link_33FE";
+// const char* WIFI_PASSWORD = "82250805";
+const char* WIFI_SSID     = "ASUS_E9";
+const char* WIFI_PASSWORD = "WHwxa031";
 
 IPAddress local_IP(192, 168, 1, 99);
 IPAddress gateway(192, 168, 1, 1);

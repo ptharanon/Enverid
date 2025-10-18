@@ -27,9 +27,13 @@ class App(MDApp):
             self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
             self.esp32 = ESP32Interface(mode="", sensors=self.sensors)  # mock ESP32 interface
         else:
-            self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
-            self.sensors = [TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=1, slave_address=1, is_VOC=True),
-                            TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=2, slave_address=10, is_VOC=False)]  # adjust as needed
+            # self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
+            # self.sensors = [TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=1, slave_address=1, is_VOC=True),
+            #                 TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=2, slave_address=10, is_VOC=False)] 
+            self.sensors = [TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=1, slave_address=2, is_VOC=True),
+                            TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=2, slave_address=3, is_VOC=False)]
+            # self.sensors = [TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=1, slave_address=2, is_VOC=True)]
+
             # Give it a consistent id so DB rows have a sensor_id
             # self.sensor.sensor_id = 1 # hardcoded for now
             # self.sensors = [self.sensor]
@@ -39,7 +43,7 @@ class App(MDApp):
 
 
         # Background services
-        self.poller = SensorPoller(sensors=self.sensors, interval=10)
+        self.poller = SensorPoller(sensors=self.sensors, interval=5)
         self.poller.start()
         # Calibration controller uses CO2 samples every 5s during windows
         self.controller = CalibrationController(sensors=self.sensors, esp32=self.esp32, sample_period_s=5)

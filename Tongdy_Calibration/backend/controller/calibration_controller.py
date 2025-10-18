@@ -16,10 +16,11 @@ class CalibrationController:
 
     def __init__(self, sensors, esp32, sample_period_s=5):
         self.TIME = 10 # debug timer 10s
+        self.TIME_CIRCULATION = 240
 
-        self.TIME_GAS_INJECTION = 9
+        self.TIME_GAS_INJECTION = 12
         self.TIME_VENT = 660
-        self.TIME_GET_AVG = 240
+        self.TIME_GET_AVG = 120
 
         self.TIME_UNIT = "seconds"
 
@@ -72,7 +73,12 @@ class CalibrationController:
     def _process(self):
         try:
             # 1) Baseline
-            self._status(f"Collecting baseline ({self.TIME_GET_AVG} {self.TIME_UNIT})")
+            self._status(f"Collecting baseline - Circulation+Vent ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
+            self.esp32.vent()
+            self.esp32.start_circulation()
+            self._sleep_with_checks(self.TIME_CIRCULATION)
+            self.vent_off()
+            self._status(f"Collecting baseline - Collection ({self.TIME_GET_AVG} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME_GET_AVG)
             self._push_struct("baseline", avg)
             if not self.running: return
@@ -80,13 +86,14 @@ class CalibrationController:
             # 2) Gas injection hold
             self._status(f"Injecting calibration gas ({self.TIME_GAS_INJECTION} {self.TIME_UNIT})")
             self.esp32.start_gas()
-            self.esp32.start_circulation()
             self._sleep_with_checks(self.TIME_GAS_INJECTION)            
             self.esp32.stop_gas()
             if not self.running: return
 
             # 3) Exposure measurement
-            self._status(f"Collecting exposure ({self.TIME_GET_AVG} {self.TIME_UNIT})")
+            self._status(f"Collecting exposure - Circulation ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
+            self._sleep_with_checks(self.TIME_CIRCULATION)
+            self._status(f"Collecting exposure - Collection ({self.TIME_GET_AVG} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME_GET_AVG)
             self._push_struct("exposure", avg)
             if not self.running: return
@@ -99,6 +106,9 @@ class CalibrationController:
             if not self.running: return
 
             # 5) Post-vent measurement
+            self._status(f"Collecting post-vent ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
+            self._sleep_with_checks(self.TIME_CIRCULATION)
+
             self._status(f"Collecting post-vent ({self.TIME_GET_AVG} {self.TIME_UNIT})")
             avg = self._collect_avg(self.TIME_GET_AVG)
             self.esp32.stop_circulation()

@@ -68,7 +68,7 @@ class TongdySensor(BaseSensor):
     Uses minimalmodbus for a simple RTU client.
     """
 
-    def __init__(self, port="/dev/ttyUSB0", sensor_id=1, slave_address=1, baudrate=19200, timeout=1.5, is_VOC=True, predelay=0.6):
+    def __init__(self, port="/dev/ttyUSB0", sensor_id=1, slave_address=1, baudrate=19200, timeout=1.5, is_VOC=True, predelay=0.3):
         """
         :param port: Serial device, e.g. /dev/ttyUSB0
         :param slave_address: Modbus address set on the TG9
