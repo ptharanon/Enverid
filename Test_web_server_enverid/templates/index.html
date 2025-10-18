@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Test Server - Cartridge Test</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">SSS Cartridge Test</div>
+        <div class="nav-menu">
+            <a href="/" class="active">Auto</a>
+            <a href="/manual">Manual</a>
+            <a href="/results">Results</a>
+            <button id="exportBtn" class="btn btn-secondary">Export Data</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="main-content">
+            <!-- Left Panel: Configuration -->
+            <div class="config-panel">
+                <h2>Cyclic Test Configuration</h2>
+                
+                <!-- REGEN MODE -->
+                <div class="config-section">
+                    <h3>REGEN MODE</h3>
+                    <div class="input-group">
+                        <label>Fan volt (max 10)</label>
+                        <input type="number" id="regen_fan_volt" min="0" max="10" step="0.1" value="{{ config.DEFAULT_REGEN['fan_volt'] }}">
+                        <span>volt</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Heater temp</label>
+                        <input type="number" id="regen_heater_temp" min="0" max="500" step="1" value="{{ config.DEFAULT_REGEN['heater_temp'] }}">
+                        <span>°C</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Duration</label>
+                        <input type="number" id="regen_duration" min="0" max="1440" step="1" value="{{ config.DEFAULT_REGEN['duration'] }}">
+                        <span>min</span>
+                    </div>
+                </div>
+
+                <!-- SCRUB MODE -->
+                <div class="config-section">
+                    <h3>SCRUB MODE</h3>
+                    <div class="input-group">
+                        <label>Fan volt (max 10)</label>
+                        <input type="number" id="scrub_fan_volt" min="0" max="10" step="0.1" value="{{ config.DEFAULT_SCRUB['fan_volt'] }}">
+                        <span>volt</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Duration</label>
+                        <input type="number" id="scrub_duration" min="0" max="1440" step="1" value="{{ config.DEFAULT_SCRUB['duration'] }}">
+                        <span>min</span>
+                    </div>
+                </div>
+
+                <!-- COOLDOWN MODE -->
+                <div class="config-section">
+                    <h3>COOLDOWN MODE</h3>
+                    <div class="input-group">
+                        <label>Fan volt (max 10)</label>
+                        <input type="number" id="cooldown_fan_volt" min="0" max="10" step="0.1" value="{{ config.DEFAULT_COOLDOWN['fan_volt'] }}">
+                        <span>volt</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Duration</label>
+                        <input type="number" id="cooldown_duration" min="0" max="1440" step="1" value="{{ config.DEFAULT_COOLDOWN['duration'] }}">
+                        <span>min</span>
+                    </div>
+                </div>
+
+                <!-- IDLE MODE -->
+                <div class="config-section">
+                    <h3>IDLE MODE</h3>
+                    <div class="input-group">
+                        <label>Duration</label>
+                        <input type="number" id="idle_duration" min="0" max="1440" step="1" value="{{ config.DEFAULT_IDLE['duration'] }}">
+                        <span>min</span>
+                    </div>
+                </div>
+
+                <!-- CYCLIC SETTINGS -->
+                <div class="config-section">
+                    <h3>CYCLIC</h3>
+                    <div class="input-group">
+                        <label>Number of cycles</label>
+                        <input type="number" id="num_cycles" min="1" max="{{ config.MAX_CYCLES }}" step="1" value="{{ config.DEFAULT_CYCLES }}">
+                        <span>cycle</span>
+                    </div>
+                    <button id="saveConfigBtn" class="btn btn-primary">SAVE CYCLIC FORMAT</button>
+                </div>
+
+                <!-- AUTOMATED TESTS -->
+                <div class="config-section">
+                    <h3>AUTOMATED TESTS</h3>
+                    <button id="runAutomatedTestsBtn" class="btn btn-warning">Run All Edge Case Tests</button>
+                    <p class="help-text">Tests valid/invalid transitions, parameter validation, and manual mode</p>
+                </div>
+            </div>
+
+            <!-- Right Panel: Status & Control -->
+            <div class="status-panel">
+                <!-- Current Status -->
+                <div class="status-display">
+                    <h3>Current Format</h3>
+                    <p id="current_format">R:<span id="fmt_regen">0v/0°C/5m</span> | S:<span id="fmt_scrub">9v/5m</span> | C:<span id="fmt_cooldown">0v/5m</span> | I:<span id="fmt_idle">5m</span></p>
+                    
+                    <div class="status-row">
+                        <span>Status:</span>
+                        <span id="test_status" class="status-badge">Idle</span>
+                    </div>
+                    
+                    <div class="status-row">
+                        <span>System:</span>
+                        <span id="system_status" class="status-badge status-{{ 'online' if status.esp32_connected else 'offline' }}">
+                            {{ status.system_status }}
+                        </span>
+                    </div>
+                    
+                    <div class="status-row">
+                        <span>Mode:</span>
+                        <span id="current_mode">{{ status.mode }}</span>
+                    </div>
+                    
+                    <div class="status-row">
+                        <span>Cycle:</span>
+                        <span id="cycle_info">0 / 0</span>
+                    </div>
+                    
+                    <div class="status-row">
+                        <span>Stage:</span>
+                        <span id="current_stage">-</span>
+                    </div>
+                    
+                    <div class="status-row">
+                        <span>Time Remaining:</span>
+                        <span id="time_remaining">-</span>
+                    </div>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="control-buttons">
+                    <button id="startBtn" class="btn btn-success btn-lg">Start</button>
+                    <button id="stopBtn" class="btn btn-danger btn-lg" disabled>Stop</button>
+                    <button id="pauseBtn" class="btn btn-warning btn-lg" disabled>Pause</button>
+                    <button id="resumeBtn" class="btn btn-info btn-lg" disabled style="display:none;">Resume</button>
+                </div>
+
+                <!-- Live Log -->
+                <div class="log-panel">
+                    <h3>Live Log</h3>
+                    <div id="log_output" class="log-output">
+                        <p>System ready. Configure test and click Start.</p>
+                    </div>
+                    <button id="clearLogBtn" class="btn btn-secondary btn-sm">Clear Log</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

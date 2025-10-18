@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Results - ESP32 Test Server</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">SSS Cartridge Test</div>
+        <div class="nav-menu">
+            <a href="/">Auto</a>
+            <a href="/manual">Manual</a>
+            <a href="/results" class="active">Results</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="results-content">
+            <h2>Test Results History</h2>
+            
+            <div class="results-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Test Name</th>
+                            <th>Start Time</th>
+                            <th>Duration</th>
+                            <th>Cycles</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for test in test_runs %}
+                        <tr>
+                            <td>{{ test.id }}</td>
+                            <td>{{ test.name }}</td>
+                            <td>{{ test.start_time }}</td>
+                            <td>
+                                {% if test.end_time %}
+                                    {{ ((test.end_time|float - test.start_time|float) / 60)|round(1) }} min
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ test.completed_cycles }} / {{ test.total_cycles }}</td>
+                            <td>
+                                <span class="status-badge status-{{ test.status }}">{{ test.status }}</span>
+                            </td>
+                            <td>
+                                <a href="/results/{{ test.id }}" class="btn btn-sm btn-primary">View Details</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        
+                        {% if not test_runs %}
+                        <tr>
+                            <td colspan="7" style="text-align: center;">No test runs found</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
