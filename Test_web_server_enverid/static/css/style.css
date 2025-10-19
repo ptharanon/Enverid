@@ -110,12 +110,12 @@ body {
     gap: 0.5rem;
 }
 
-.input-group label {
+.input-group > label:first-child {
     flex: 1;
     font-weight: 500;
 }
 
-.input-group input {
+.input-group input[type="number"] {
     width: 80px;
     flex-shrink: 0;
     padding: 0.5rem;
@@ -129,6 +129,78 @@ body {
     font-size: 0.9rem;
     width: 50px;
     flex-shrink: 0;
+}
+
+/* Toggle Switch - Standard iOS-style toggle */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 51px;
+    height: 31px;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+/* Hide default HTML checkbox */
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* The slider */
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 31px;
+}
+
+/* Slider knob */
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 25px;
+    width: 25px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+
+/* When checked - change background color */
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--success-color);
+}
+
+/* When checked - move knob */
+.toggle-switch input:checked + .toggle-slider:before {
+    /* Container: 51px, Knob: 25px, Padding: 3px each side
+       Translation: 51 - 25 - 3 - 3 = 20px */
+    transform: translateX(20px);
+}
+
+/* Focus state for accessibility */
+.toggle-switch input:focus + .toggle-slider {
+    box-shadow: 0 0 1px var(--success-color);
+}
+
+/* ON/OFF label next to toggle */
+.toggle-label {
+    font-weight: 600;
+    color: var(--dark-color);
+    width: 50px;
+    flex-shrink: 0;
+    text-align: left;
+    display: inline-block;
+    vertical-align: middle;
+    line-height: 34px;
 }
 
 /* Buttons */
@@ -261,7 +333,8 @@ body {
 }
 
 .status-stopped,
-.status-error {
+.status-error,
+.status-failed {
     background-color: #f8d7da;
     color: #721c24;
 }

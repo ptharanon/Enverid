@@ -9,7 +9,13 @@ from database import TestDatabase
 from cycle_manager import CycleManager
 from test_scenarios import TestSuiteRunner
 from config import config
-import os
+from live_log import live_log
+
+import logging
+
+# Logger setup to reduce Flask request logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)  
 
 app = Flask(__name__)
 
@@ -56,7 +62,23 @@ def manual_control():
 @app.route('/results')
 def results_page():
     """Test results page"""
+    from datetime import datetime
     test_runs = db.get_all_test_runs(limit=20)
+    
+    # Calculate duration for each test run
+    for test in test_runs:
+        if test['end_time'] and test['start_time']:
+            try:
+                # Parse datetime strings
+                start_dt = datetime.fromisoformat(test['start_time'].replace(' ', 'T'))
+                end_dt = datetime.fromisoformat(test['end_time'].replace(' ', 'T'))
+                duration_seconds = (end_dt - start_dt).total_seconds()
+                test['duration_minutes'] = duration_seconds / 60
+            except:
+                test['duration_minutes'] = None
+        else:
+            test['duration_minutes'] = None
+    
     return render_template('results.html',
                          test_runs=test_runs)
 
@@ -104,7 +126,7 @@ def api_configure_test():
     try:
         regen_config = {
             'fan_volt': float(data.get('regen_fan_volt', 0)),
-            'heater_temp': float(data.get('regen_heater_temp', 0)),
+            'heater_on': bool(data.get('regen_heater_temp', 0)),
             'duration': int(data.get('regen_duration', 5))
         }
         
@@ -185,6 +207,7 @@ def api_stop_test():
     if not cycle_manager.is_running:
         return jsonify({'error': 'No test running'}), 400
     
+    live_log.add('Test stop requested by user', level='warning')
     cycle_manager.stop_test()
     return jsonify({'status': 'stopped'})
 
@@ -216,23 +239,31 @@ def api_manual_command():
     
     try:
         fan_volt = float(data.get('fan_volt', 0))
-        heater_temp = float(data.get('heater_temp', 0))
+        heater_on = bool(data.get('heater_on', 0))
         
         # Validate
         if not (0 <= fan_volt <= config.MAX_FAN_VOLTAGE):
+            live_log.add('Invalid fan voltage for manual command', level='error')
             return jsonify({'error': 'Invalid fan voltage'}), 400
+        
+        # Log command attempt
+        heater_status = 'ON' if heater_on else 'OFF'
+        live_log.add(
+            f"Manual command: Fan {fan_volt}V, Heater {heater_status}",
+            level='info'
+        )
         
         # Send command
         success, response, error, duration_ms = client.send_manual_command(
             fan_volt=fan_volt,
-            heater=heater_temp > 0
+            heater=heater_on
         )
         
         # Log command
         db.log_esp32_command(
             endpoint='/manual',
             method='POST',
-            payload={'fan_volt': fan_volt, 'heater': heater_temp > 0},
+            payload={'fan_volt': fan_volt, 'heater': heater_on},
             response_status=200 if success else None,
             response_body=str(response),
             error=error,
@@ -240,12 +271,21 @@ def api_manual_command():
         )
         
         if success:
+            live_log.add(
+                'Manual command sent successfully',
+                level='success',
+                details={'response_time_ms': duration_ms}
+            )
             return jsonify({
                 'status': 'success',
                 'response': response,
                 'duration_ms': duration_ms
             })
         else:
+            live_log.add(
+                f'Manual command failed: {error}',
+                level='error'
+            )
             return jsonify({
                 'status': 'error',
                 'error': error,
@@ -253,6 +293,7 @@ def api_manual_command():
             }), 500
             
     except Exception as e:
+        live_log.add(f'Manual command error: {str(e)}', level='error')
         return jsonify({'error': str(e)}), 400
 
 
@@ -304,12 +345,61 @@ def api_recent_commands():
     return jsonify(commands)
 
 
+@app.route('/api/logs', methods=['GET'])
+def api_get_logs():
+    """Get live log messages"""
+    since_sequence = request.args.get('since', 0, type=int)
+    limit = request.args.get('limit', 50, type=int)
+    
+    messages = live_log.get_recent(since_sequence=since_sequence, limit=limit)
+    
+    return jsonify({
+        'messages': messages,
+        'last_sequence': live_log.get_last_sequence()
+    })
+
+
+@app.route('/api/logs/clear', methods=['POST'])
+def api_clear_logs():
+    """Clear live log messages"""
+    live_log.clear()
+    return jsonify({'status': 'success', 'message': 'Logs cleared'})
+
+
 @app.route('/api/test_runs', methods=['GET'])
 def api_test_runs():
     """Get list of test runs"""
     limit = request.args.get('limit', 20, type=int)
     test_runs = db.get_all_test_runs(limit=limit)
     return jsonify(test_runs)
+
+
+@app.route('/api/test/<int:test_run_id>', methods=['DELETE'])
+def api_delete_test_run(test_run_id):
+    """Delete a test run and all associated data"""
+    try:
+        # Check if test exists
+        test_run = db.get_test_run(test_run_id)
+        if not test_run:
+            return jsonify({'error': 'Test run not found'}), 404
+        
+        # Check if test is currently running
+        if cycle_manager.is_running and cycle_manager.current_test_run_id == test_run_id:
+            return jsonify({'error': 'Cannot delete a running test'}), 400
+        
+        # Delete the test run (cascade deletes related data)
+        success = db.delete_test_run(test_run_id)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Test run {test_run_id} deleted successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to delete test run'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ===== ERROR HANDLERS =====

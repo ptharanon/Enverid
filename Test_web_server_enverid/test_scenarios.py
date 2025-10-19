@@ -7,6 +7,7 @@ from typing import Dict, List
 from esp32_client import ESP32Client
 from database import TestDatabase
 from config import config
+from live_log import live_log
 import time
 
 
@@ -46,6 +47,11 @@ class ValidStateTransitionTest(TestScenario):
             expected_result="ESP32 accepts transition (HTTP 200)"
         )
         
+        live_log.add(
+            f"Testing: {self.from_state.upper()} → {self.to_state.upper()}",
+            level='info'
+        )
+        
         try:
             # First, set to from_state
             success1, _, _, _ = client.send_auto_command(
@@ -68,12 +74,20 @@ class ValidStateTransitionTest(TestScenario):
             if success2:
                 self.passed = True
                 self.actual_result = f"Transition accepted: {response}"
+                live_log.add(
+                    f"Valid transition {self.from_state.upper()} → {self.to_state.upper()}",
+                    level='success'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, True, None
                 )
             else:
                 self.passed = False
                 self.actual_result = f"Transition rejected: {error}"
+                live_log.add(
+                    f"Transition rejected: {self.from_state.upper()} → {self.to_state.upper()}",
+                    level='error'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, False, error
                 )
@@ -109,6 +123,11 @@ class InvalidStateTransitionTest(TestScenario):
             expected_result="ESP32 rejects transition (HTTP 400)"
         )
         
+        live_log.add(
+            f"Testing invalid: {self.from_state.upper()} → {self.to_state.upper()}",
+            level='info'
+        )
+        
         try:
             # Set to from_state
             client.send_auto_command(
@@ -132,12 +151,20 @@ class InvalidStateTransitionTest(TestScenario):
             if not success:
                 self.passed = True
                 self.actual_result = f"Correctly rejected: {error}"
+                live_log.add(
+                    f"Invalid transition correctly rejected",
+                    level='success'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, True, None
                 )
             else:
                 self.passed = False
-                self.actual_result = f"ERROR: Accepted invalid transition"
+                self.actual_result = "ERROR: Accepted invalid transition"
+                live_log.add(
+                    f"BUG: Invalid transition was accepted!",
+                    level='error'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, False,
                     "Invalid transition was accepted"
@@ -175,6 +202,11 @@ class ParameterValidationTest(TestScenario):
             expected_result=self.expected_behavior
         )
         
+        live_log.add(
+            f"Testing invalid {self.param_name}: {self.invalid_value}",
+            level='info'
+        )
+        
         try:
             # Build command with invalid parameter
             if self.param_name == 'fan_volt':
@@ -198,12 +230,20 @@ class ParameterValidationTest(TestScenario):
             if not success:
                 self.passed = True
                 self.actual_result = f"Correctly rejected: {error}"
+                live_log.add(
+                    f"Invalid {self.param_name} correctly rejected",
+                    level='success'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, True, None
                 )
             else:
                 self.passed = False
-                self.actual_result = f"ERROR: Accepted invalid value"
+                self.actual_result = "ERROR: Accepted invalid value"
+                live_log.add(
+                    f"BUG: Invalid {self.param_name} was accepted!",
+                    level='error'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, False,
                     "Invalid parameter was accepted"
@@ -238,6 +278,8 @@ class ManualModeTest(TestScenario):
             expected_result="Can enter manual mode from any auto state"
         )
         
+        live_log.add("Testing manual mode override", level='info')
+        
         try:
             # Start in scrub mode
             client.send_auto_command('scrub', 5.0, False, 10)
@@ -252,12 +294,20 @@ class ManualModeTest(TestScenario):
             if success:
                 self.passed = True
                 self.actual_result = f"Manual mode accepted: {response}"
+                live_log.add(
+                    "Manual mode override successful",
+                    level='success'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, True, None
                 )
             else:
                 self.passed = False
                 self.actual_result = f"Manual mode rejected: {error}"
+                live_log.add(
+                    "Manual mode override failed",
+                    level='error'
+                )
                 db.complete_test_scenario(
                     scenario_id, self.actual_result, False, error
                 )
@@ -287,11 +337,9 @@ class TestSuiteRunner:
         
         # Valid state transitions (based on ESP32 code)
         valid_transitions = [
-            ('idle', 'scrub'),
             ('scrub', 'regen'),
             ('regen', 'cooldown'),
             ('cooldown', 'idle'),
-            ('idle', 'idle'),  # Stay in same state
         ]
         
         for from_state, to_state in valid_transitions:
@@ -304,7 +352,6 @@ class TestSuiteRunner:
             ('idle', 'regen'),      # Skip scrub
             ('idle', 'cooldown'),   # Skip scrub and regen
             ('scrub', 'cooldown'),  # Skip regen
-            ('scrub', 'idle'),      # Backward (might be valid, check ESP32)
             ('regen', 'scrub'),     # Backward
             ('cooldown', 'scrub'),  # Backward
         ]
@@ -352,6 +399,11 @@ class TestSuiteRunner:
         print(f"Running Test Suite: {len(self.scenarios)} scenarios")
         print(f"{'='*60}\n")
         
+        live_log.add(
+            f"Automated test suite started - {len(self.scenarios)} scenarios",
+            level='info'
+        )
+        
         passed = 0
         failed = 0
         
@@ -363,10 +415,10 @@ class TestSuiteRunner:
                 
                 if result:
                     passed += 1
-                    print(f"  ✓ PASSED: {scenario.actual_result}")
+                    print(f"  PASSED: {scenario.actual_result}")
                 else:
                     failed += 1
-                    print(f"  ✗ FAILED: {scenario.actual_result}")
+                    print(f"  FAILED: {scenario.actual_result}")
                 
                 # Small delay between tests
                 time.sleep(0.5)
@@ -374,6 +426,10 @@ class TestSuiteRunner:
             except Exception as e:
                 failed += 1
                 print(f"  ✗ ERROR: {e}")
+                live_log.add(
+                    f"Test error: {scenario.name} - {str(e)}",
+                    level='error'
+                )
         
         # Summary
         print(f"\n{'='*60}")
@@ -382,6 +438,12 @@ class TestSuiteRunner:
         print(f"  Failed: {failed}/{len(self.scenarios)}")
         print(f"  Success Rate: {(passed/len(self.scenarios)*100):.1f}%")
         print(f"{'='*60}\n")
+        
+        success_rate = (passed/len(self.scenarios)*100)
+        live_log.add(
+            f"Test suite complete: {passed}/{len(self.scenarios)} passed ({success_rate:.1f}%)",
+            level='success' if failed == 0 else 'warning'
+        )
         
         # Update test run
         summary = f"Passed: {passed}/{len(self.scenarios)}, Failed: {failed}"

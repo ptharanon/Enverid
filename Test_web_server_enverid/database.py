@@ -151,6 +151,30 @@ class TestDatabase:
             ''', (limit,))
             return [dict(row) for row in cursor.fetchall()]
     
+    def delete_test_run(self, test_run_id: int) -> bool:
+        """Delete a test run and all associated data (cascading)"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Delete in order to respect foreign key constraints
+                # 1. Delete test scenarios
+                cursor.execute('DELETE FROM test_scenarios WHERE test_run_id = ?', (test_run_id,))
+                
+                # 2. Delete ESP32 commands
+                cursor.execute('DELETE FROM esp32_commands WHERE test_run_id = ?', (test_run_id,))
+                
+                # 3. Delete cycle executions
+                cursor.execute('DELETE FROM cycle_executions WHERE test_run_id = ?', (test_run_id,))
+                
+                # 4. Delete the test run itself
+                cursor.execute('DELETE FROM test_runs WHERE id = ?', (test_run_id,))
+                
+                return True
+        except Exception as e:
+            print(f"Error deleting test run {test_run_id}: {e}")
+            return False
+    
     # ===== CYCLE EXECUTION METHODS =====
     
     def create_cycle_execution(self, test_run_id: int, cycle_number: int, 
@@ -212,10 +236,10 @@ class TestDatabase:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO esp32_commands 
-                (test_run_id, cycle_execution_id, endpoint, method, payload, 
+                (test_run_id, cycle_execution_id, timestamp, endpoint, method, payload, 
                  response_status, response_body, error, duration_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (test_run_id, cycle_execution_id, endpoint, method, 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (test_run_id, cycle_execution_id, datetime.now(), endpoint, method, 
                   json.dumps(payload), response_status, response_body, error, duration_ms))
             return cursor.lastrowid
     

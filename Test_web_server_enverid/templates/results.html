@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test Results - ESP32 Test Server</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+            padding: 0.375rem 0.75rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .btn-delete:hover {
+            background-color: #c82333;
+        }
+        .btn-delete:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -31,34 +49,42 @@
                             <th>Cycles</th>
                             <th>Status</th>
                             <th>Actions</th>
+                            <th>Delete</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for test in test_runs %}
                         <tr>
-                            <td>{{ test.id }}</td>
-                            <td>{{ test.name }}</td>
-                            <td>{{ test.start_time }}</td>
+                            <td>{{ test['id'] }}</td>
+                            <td>{{ test['name'] }}</td>
+                            <td>{{ test['start_time'] }}</td>
                             <td>
-                                {% if test.end_time %}
-                                    {{ ((test.end_time|float - test.start_time|float) / 60)|round(1) }} min
-                                {% else %}
+                                {% if test['duration_minutes'] is not none %}
+                                    {{ "%.1f"|format(test['duration_minutes']) }} min
+                                {% elif test['end_time'] %}
                                     -
+                                {% else %}
+                                    Running...
                                 {% endif %}
                             </td>
-                            <td>{{ test.completed_cycles }} / {{ test.total_cycles }}</td>
+                            <td>{{ test['completed_cycles'] }} / {{ test['total_cycles'] }}</td>
                             <td>
-                                <span class="status-badge status-{{ test.status }}">{{ test.status }}</span>
+                                <span class="status-badge status-{{ test['status'] }}">{{ test['status'] }}</span>
                             </td>
                             <td>
-                                <a href="/results/{{ test.id }}" class="btn btn-sm btn-primary">View Details</a>
+                                <a href="/results/{{ test['id'] }}" class="btn btn-sm btn-primary">View Details</a>
+                            </td>
+                            <td>
+                                <button class="btn-delete" onclick="deleteTest({{ test['id'] }}, '{{ test['name'] }}')">
+                                    🗑️ Delete
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
                         
                         {% if not test_runs %}
                         <tr>
-                            <td colspan="7" style="text-align: center;">No test runs found</td>
+                            <td colspan="8" style="text-align: center;">No test runs found</td>
                         </tr>
                         {% endif %}
                     </tbody>
@@ -66,5 +92,42 @@
             </div>
         </div>
     </div>
+
+    <script>
+        async function deleteTest(testId, testName) {
+            if (!confirm(`Are you sure you want to delete test "${testName}" (ID: ${testId})?\n\nThis will permanently delete all associated data including cycles, commands, and scenarios.`)) {
+                return;
+            }
+
+            const button = event.target;
+            button.disabled = true;
+            button.textContent = 'Deleting...';
+
+            try {
+                const response = await fetch(`/api/test/${testId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`Test "${testName}" deleted successfully!`);
+                    // Reload the page to refresh the list
+                    window.location.reload();
+                } else {
+                    alert(`Error deleting test: ${data.error || 'Unknown error'}`);
+                    button.disabled = false;
+                    button.textContent = '🗑️ Delete';
+                }
+            } catch (error) {
+                alert(`Network error: ${error.message}`);
+                button.disabled = false;
+                button.textContent = '🗑️ Delete';
+            }
+        }
+    </script>
 </body>
 </html>

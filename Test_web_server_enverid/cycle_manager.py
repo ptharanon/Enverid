@@ -10,12 +10,13 @@ from datetime import datetime, timedelta
 from esp32_client import ESP32Client, ESP32CommandBuilder
 from database import TestDatabase
 from config import config
+from live_log import live_log
 
 
 class CycleManager:
     """Manages cyclic test execution"""
     
-    STAGE_ORDER = ['idle', 'scrub', 'regen', 'cooldown']
+    STAGE_ORDER = ['scrub', 'regen', 'cooldown', 'idle']
     
     def __init__(self, esp32_client: ESP32Client, database: TestDatabase):
         self.client = esp32_client
@@ -76,13 +77,21 @@ class CycleManager:
         # Check ESP32 connection
         if not self.client.check_connection():
             print("ERROR: Cannot connect to ESP32")
+            live_log.add("Cannot connect to ESP32", level='error')
             return False
+        
+        live_log.add(f"Starting test: {test_name}", level='info')
         
         # Create test run in database
         self.current_test_run_id = self.db.create_test_run(
             name=test_name,
             total_cycles=self.total_cycles,
             config=self.test_config
+        )
+        
+        live_log.add(
+            f"Test configured: {self.total_cycles} cycles",
+            level='success'
         )
         
         # Reset state
@@ -176,6 +185,10 @@ class CycleManager:
                 
                 self.current_cycle = cycle_num
                 print(f"\n=== Starting Cycle {cycle_num}/{self.total_cycles} ===")
+                live_log.add(
+                    f"Starting Cycle {cycle_num} of {self.total_cycles}",
+                    level='info'
+                )
                 
                 # Execute each stage in order
                 for stage in self.STAGE_ORDER:
@@ -185,13 +198,22 @@ class CycleManager:
                     # Check pause
                     if self.pause_event.is_set():
                         print(f"Test paused at cycle {cycle_num}, stage {stage}")
+                        live_log.add(
+                            f"Test paused at Cycle {cycle_num}, Stage {stage.upper()}",
+                            level='warning'
+                        )
                         self.pause_event.wait()  # Wait until resumed
                         print("Test resumed")
+                        live_log.add("Test resumed", level='info')
                     
                     success = self._execute_stage(stage, cycle_num)
                     
                     if not success:
                         print(f"ERROR: Stage {stage} failed. Stopping test.")
+                        live_log.add(
+                            f"Stage {stage.upper()} failed - Stopping test",
+                            level='error'
+                        )
                         self.stop_event.set()
                         break
                 
@@ -201,8 +223,12 @@ class CycleManager:
                         self.current_test_run_id,
                         completed_cycles=cycle_num
                     )
+                    live_log.add(
+                        f"Cycle {cycle_num} completed successfully",
+                        level='success'
+                    )
             
-            # Test completed
+            # Test completed or stopped
             if not self.stop_event.is_set():
                 self.db.update_test_run(
                     self.current_test_run_id,
@@ -211,9 +237,24 @@ class CycleManager:
                     result_summary='All cycles completed successfully'
                 )
                 print(f"\n=== Test Completed: {self.total_cycles} cycles ===")
+                live_log.add(
+                    f"Test completed - All {self.total_cycles} cycles successful",
+                    level='success'
+                )
+            else:
+                # Test was stopped/failed
+                self.db.update_test_run(
+                    self.current_test_run_id,
+                    end_time=datetime.now(),
+                    status='failed',
+                    result_summary='Test stopped due to stage failure or stopped'
+                )
+                print(f"\n=== Test Failed/Stopped ===")
+                live_log.add("Test stopped or failed", level='warning')
             
         except Exception as e:
             print(f"ERROR in cycle execution: {e}")
+            live_log.add(f"Critical error: {str(e)}", level='error')
             if self.current_test_run_id:
                 self.db.update_test_run(
                     self.current_test_run_id,
@@ -230,11 +271,24 @@ class CycleManager:
         """Execute a single stage"""
         self.current_stage = stage
         stage_config = self.test_config[stage]
-        
-        print(f"  Executing stage: {stage.upper()}")
-        
+                
         # Get duration
         duration_min = stage_config['duration']
+        
+        # Log stage start
+        stage_details = {
+            'stage': stage.upper(),
+            'duration_min': duration_min,
+            'fan_volt': stage_config.get('fan_volt', 0)
+        }
+        if stage == 'regen':
+            stage_details['heater'] = 'ON' if stage_config.get('heater_on', False) else 'OFF'
+        
+        live_log.add(
+            f"Stage {stage.upper()} starting - {duration_min} min",
+            level='info',
+            details=stage_details
+        )
         
         # Create cycle execution record
         cycle_execution_id = self.db.create_cycle_execution(
@@ -249,6 +303,10 @@ class CycleManager:
         
         if not success:
             self.db.complete_cycle_execution(cycle_execution_id, status='failed')
+            live_log.add(
+                f"Stage {stage.upper()} failed - ESP32 command error",
+                level='error'
+            )
             return False
         
         # Set timing
@@ -260,8 +318,8 @@ class CycleManager:
         print(f"    Duration: {duration_min} minutes")
         print(f"    Fan voltage: {stage_config.get('fan_volt', 0)}V")
         if stage == 'regen':
-            heater_temp = stage_config.get('heater_temp', 0)
-            print(f"    Heater: {'ON' if heater_temp > 0 else 'OFF'} ({heater_temp}°C)")
+            heater_on = stage_config.get('heater_on', False)
+            print(f"    Heater: {'ON' if heater_on else 'OFF'}")
         
         # Wait with periodic status updates
         end_time = time.time() + (duration_min * 60)
@@ -283,6 +341,10 @@ class CycleManager:
         # Stage completed
         self.db.complete_cycle_execution(cycle_execution_id, status='completed')
         print(f"  Stage {stage.upper()} completed")
+        live_log.add(
+            f"Stage {stage.upper()} completed successfully",
+            level='success'
+        )
         
         return True
     
@@ -293,20 +355,20 @@ class CycleManager:
         # Build command based on stage
         if stage == 'regen':
             fan_volt = stage_config.get('fan_volt', 0)
-            heater_temp = stage_config.get('heater_temp', 0)
+            heater_on = stage_config.get('heater_on', False)
             duration = stage_config.get('duration', 0)
             
             success, response, error, duration_ms = self.client.send_auto_command(
                 phase='regen',
                 fan_volt=fan_volt,
-                heater=heater_temp > 0,
+                heater=heater_on,
                 duration=duration
             )
             
             payload = {
                 'phase': 'regen',
                 'fan_volt': fan_volt,
-                'heater': heater_temp > 0,
+                'heater': heater_on,
                 'duration': duration
             }
             
@@ -381,7 +443,17 @@ class CycleManager:
         
         if not success:
             print(f"    ERROR: {error}")
+            live_log.add(
+                f"ESP32 command failed: {error}",
+                level='error',
+                details={'stage': stage, 'payload': payload}
+            )
             return False
         
         print(f"    ESP32 response: {response}")
+        live_log.add(
+            f"ESP32 command sent successfully to {stage.upper()}",
+            level='success',
+            details={'response_time_ms': duration_ms}
+        )
         return True

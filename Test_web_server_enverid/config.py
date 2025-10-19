@@ -10,7 +10,7 @@ load_dotenv()
 
 class Config:
     # ESP32 Connection
-    ESP32_IP = os.getenv('ESP32_IP', '172.29.147.180')
+    ESP32_IP = os.getenv('ESP32_IP', '192.168.1.55')
     ESP32_PORT = os.getenv('ESP32_PORT', '80')
     ESP32_BASE_URL = f"http://{ESP32_IP}:{ESP32_PORT}"
     
@@ -30,7 +30,7 @@ class Config:
     # Stage Parameters (matching web UI)
     DEFAULT_REGEN = {
         'fan_volt': 0,
-        'heater_temp': 0,  # >0 = ON, 0 = OFF
+        'heater_on': False,  # Boolean: True = ON, False = OFF
         'duration': 5  # minutes
     }
     

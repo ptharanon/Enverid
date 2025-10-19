@@ -37,6 +37,11 @@ constexpr float MAX_VOLTAGE = 10.0f;   // Converter output full-scale
 
 constexpr int PIN_HEATER_RELAY = 19;  // TODO Recheck
 
+// Emergency shutdown threshold (milliseconds)
+// Only trigger emergency shutdown if time has exceeded endTime by this much
+// This prevents premature shutdown during normal cyclic operations
+constexpr unsigned long EMERGENCY_SHUTDOWN_THRESHOLD_MS = 10 * 60 * 1000UL; // 10 minutes
+
 //------------------------------------------------
 // NETWORK SETTINGS
 //------------------------------------------------
@@ -330,7 +335,10 @@ AsyncCallbackJsonWebHandler* manageAutoHandler = new AsyncCallbackJsonWebHandler
     sendErrorResponse(request, 500, "Failed to acquire state lock");
     return;
   }
-  if(localCurrentState == targetState) {
+  // Added check to prevent redundant state setting
+  // Exceptions: IDLE and MANUAL can be re-set
+  if(localCurrentState == targetState && targetState != SystemState::MANUAL
+  && targetState != SystemState::IDLE) {
     sendErrorResponse(request, 400, "Already in the target state");
     return;
   }
@@ -618,8 +626,11 @@ void loop() {
     unsigned long localEndTime = stateEndTime;
     xSemaphoreGive(stateMutex);
     
+    // Emergency shutdown only if state is not MANUAL and time has exceeded 
+    // the threshold beyond the expected end time
     if(localState != SystemState::MANUAL) {
-      if(localEndTime > 0 && currentTime >= localEndTime) {
+      if(localEndTime > 0 && currentTime >= (localEndTime + EMERGENCY_SHUTDOWN_THRESHOLD_MS)) {
+        Serial.println("WARNING: Emergency shutdown triggered - exceeded time threshold");
         emergencyShutdown();
       }
     }

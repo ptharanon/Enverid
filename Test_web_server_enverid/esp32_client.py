@@ -141,15 +141,15 @@ class ESP32CommandBuilder:
     """Helper class to build commands matching the web UI format"""
     
     @staticmethod
-    def build_regen_command(fan_volt: float, heater_temp: float, duration: int) -> Dict:
+    def build_regen_command(fan_volt: float, heater_on: bool, duration: int) -> Dict:
         """
         Build REGEN command
-        heater_temp > 0 = ON, heater_temp = 0 = OFF
+        heater_on: Boolean True = ON, False = OFF
         """
         return {
             'phase': 'regen',
             'fan_volt': fan_volt,
-            'heater': heater_temp > 0,  # Convert temp to boolean
+            'heater': heater_on,
             'duration': duration
         }
     
@@ -184,9 +184,9 @@ class ESP32CommandBuilder:
         }
     
     @staticmethod
-    def build_manual_command(fan_volt: float, heater_temp: float) -> Dict:
-        """Build MANUAL command"""
+    def build_manual_command(fan_volt: float, heater_on: bool) -> Dict:
+        """Build manual command"""
         return {
             'fan_volt': fan_volt,
-            'heater': heater_temp > 0  # Convert temp to boolean
+            'heater': heater_on
         }

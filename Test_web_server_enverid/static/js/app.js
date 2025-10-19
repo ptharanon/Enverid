@@ -1,13 +1,16 @@
 // ESP32 Test Server - Main Dashboard JavaScript
 
 let statusInterval = null;
+let logInterval = null;
 let isTestRunning = false;
+let lastLogSequence = 0;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     updateStatus();
     startStatusPolling();
+    startLogPolling();
     updateFormatDisplay();
 });
 
@@ -15,6 +18,14 @@ function initializeEventListeners() {
     // Configuration inputs - update format display on change
     document.querySelectorAll('input[type="number"]').forEach(input => {
         input.addEventListener('input', updateFormatDisplay);
+    });
+    
+    // Heater toggle - update format display and label
+    const heaterToggle = document.getElementById('regen_heater_toggle');
+    heaterToggle.addEventListener('change', function() {
+        const label = document.getElementById('regen_heater_label');
+        label.textContent = this.checked ? 'ON' : 'OFF';
+        updateFormatDisplay();
     });
     
     // Buttons
@@ -30,7 +41,7 @@ function initializeEventListeners() {
 
 function updateFormatDisplay() {
     const regenV = document.getElementById('regen_fan_volt').value;
-    const regenT = document.getElementById('regen_heater_temp').value;
+    const regenHeater = document.getElementById('regen_heater_toggle').checked ? 'ON' : 'OFF';
     const regenD = document.getElementById('regen_duration').value;
     
     const scrubV = document.getElementById('scrub_fan_volt').value;
@@ -41,7 +52,7 @@ function updateFormatDisplay() {
     
     const idleD = document.getElementById('idle_duration').value;
     
-    document.getElementById('fmt_regen').textContent = `${regenV}v/${regenT}°C/${regenD}m`;
+    document.getElementById('fmt_regen').textContent = `${regenV}v/${regenHeater}/${regenD}m`;
     document.getElementById('fmt_scrub').textContent = `${scrubV}v/${scrubD}m`;
     document.getElementById('fmt_cooldown').textContent = `${cooldownV}v/${cooldownD}m`;
     document.getElementById('fmt_idle').textContent = `${idleD}m`;
@@ -271,7 +282,7 @@ function updateButtonStates() {
 function getConfiguration() {
     return {
         regen_fan_volt: parseFloat(document.getElementById('regen_fan_volt').value),
-        regen_heater_temp: parseFloat(document.getElementById('regen_heater_temp').value),
+        regen_heater_temp: document.getElementById('regen_heater_toggle').checked ? 1 : 0,
         regen_duration: parseInt(document.getElementById('regen_duration').value),
         scrub_fan_volt: parseFloat(document.getElementById('scrub_fan_volt').value),
         scrub_duration: parseInt(document.getElementById('scrub_duration').value),
@@ -293,11 +304,68 @@ function addLog(message, type = 'info') {
 }
 
 function clearLog() {
-    document.getElementById('log_output').innerHTML = '';
+    if (!confirm('Clear all log messages?')) {
+        return;
+    }
+    
+    fetch('/api/logs/clear', {
+        method: 'POST'
+    })
+    .then(() => {
+        document.getElementById('log_output').innerHTML = '<p>Log cleared.</p>';
+        lastLogSequence = 0;
+    })
+    .catch(error => {
+        console.error('Error clearing log:', error);
+    });
 }
 
 function startStatusPolling() {
     statusInterval = setInterval(updateStatus, 2000); // Poll every 2 seconds
+}
+
+function startLogPolling() {
+    // Poll for new log messages every 1 second
+    logInterval = setInterval(updateLogs, 1000);
+}
+
+async function updateLogs() {
+    try {
+        const response = await fetch(`/api/logs?since=${lastLogSequence}`);
+        const data = await response.json();
+        
+        if (data.messages && data.messages.length > 0) {
+            const logOutput = document.getElementById('log_output');
+            
+            // Remove initial message if present
+            if (logOutput.children.length === 1 && 
+                logOutput.children[0].textContent.includes('System ready')) {
+                logOutput.innerHTML = '';
+            }
+            
+            data.messages.forEach(msg => {
+                const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+                const p = document.createElement('p');
+                p.className = `log-${msg.level}`;
+                p.textContent = `[${timestamp}] ${msg.message}`;
+                
+                // Add details tooltip if present
+                if (msg.details && Object.keys(msg.details).length > 0) {
+                    p.title = JSON.stringify(msg.details, null, 2);
+                }
+                
+                logOutput.appendChild(p);
+            });
+            
+            // Auto-scroll to bottom
+            logOutput.scrollTop = logOutput.scrollHeight;
+            
+            // Update last sequence
+            lastLogSequence = data.last_sequence;
+        }
+    } catch (error) {
+        console.error('Error fetching logs:', error);
+    }
 }
 
 function exportData() {

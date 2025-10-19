@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Details - {{ test_run.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .details-container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            margin-bottom: 1.5rem;
+            color: #343a40;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .info-item {
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .info-item label {
+            display: block;
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        .info-item value {
+            display: block;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #343a40;
+        }
+        .cycles-table, .commands-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        .cycles-table th, .cycles-table td,
+        .commands-table th, .commands-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .cycles-table th, .commands-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .cycles-table tr:hover, .commands-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        .command-payload {
+            font-family: monospace;
+            font-size: 0.85rem;
+            background: #f8f9fa;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .stat-card h3 {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #343a40;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">SSS Cartridge Test</div>
+        <div class="nav-menu">
+            <a href="/">Auto</a>
+            <a href="/manual">Manual</a>
+            <a href="/results" class="active">Results</a>
+        </div>
+    </nav>
+
+    <div class="details-container">
+        <a href="/results" class="back-link">← Back to Results</a>
+        
+        <!-- Test Run Overview -->
+        <div class="section">
+            <h2>Test Run: {{ test_run['name'] }}</h2>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Test ID</label>
+                    <value>{{ test_run['id'] }}</value>
+                </div>
+                <div class="info-item">
+                    <label>Status</label>
+                    <value>
+                        <span class="status-badge status-{{ test_run['status'] }}">
+                            {{ test_run['status'] }}
+                        </span>
+                    </value>
+                </div>
+                <div class="info-item">
+                    <label>Start Time</label>
+                    <value>{{ test_run['start_time'] }}</value>
+                </div>
+                <div class="info-item">
+                    <label>End Time</label>
+                    <value>{{ test_run['end_time'] if test_run['end_time'] else 'Running...' }}</value>
+                </div>
+                <div class="info-item">
+                    <label>Cycles Completed</label>
+                    <value>{{ test_run['completed_cycles'] }} / {{ test_run['total_cycles'] }}</value>
+                </div>
+                <div class="info-item">
+                    <label>Duration</label>
+                    <value>
+                        {% if test_run['end_time'] %}
+                            {{ "%.1f"|format((test_run['end_time']|float - test_run['start_time']|float) / 60) }} min
+                        {% else %}
+                            In progress
+                        {% endif %}
+                    </value>
+                </div>
+            </div>
+
+            {% if test_run['result_summary'] %}
+            <div class="info-item" style="margin-top: 1rem;">
+                <label>Summary</label>
+                <value>{{ test_run['result_summary'] }}</value>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Statistics -->
+        {% if statistics %}
+        <div class="section">
+            <h2>Statistics</h2>
+            
+            <div class="stats-grid">
+                <!-- Command Stats -->
+                <div class="stat-card">
+                    <h3>Total Commands</h3>
+                    <div class="stat-value">{{ statistics['commands']['total'] or 0 }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Successful Commands</h3>
+                    <div class="stat-value">{{ statistics['commands']['successful'] or 0 }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Command Errors</h3>
+                    <div class="stat-value">{{ statistics['commands']['errors'] or 0 }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Response Time</h3>
+                    <div class="stat-value">
+                        {% if statistics['commands']['avg_duration_ms'] %}
+                            {{ "%.0f"|format(statistics['commands']['avg_duration_ms']) }} ms
+                        {% else %}
+                            - ms
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Cycle Stats -->
+                <div class="stat-card">
+                    <h3>Total Stages</h3>
+                    <div class="stat-value">{{ statistics['cycles']['total_stages'] or 0 }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Completed Stages</h3>
+                    <div class="stat-value">{{ statistics['cycles']['completed_stages'] or 0 }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Stage Duration</h3>
+                    <div class="stat-value">
+                        {% if statistics['cycles']['avg_stage_duration_sec'] %}
+                            {{ "%.1f"|format(statistics['cycles']['avg_stage_duration_sec'] / 60) }} min
+                        {% else %}
+                            - min
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Test Scenario Stats -->
+                {% if statistics['scenarios']['total_scenarios'] and statistics['scenarios']['total_scenarios'] > 0 %}
+                <div class="stat-card">
+                    <h3>Test Scenarios</h3>
+                    <div class="stat-value">
+                        {{ statistics['scenarios']['passed_scenarios'] or 0 }} / {{ statistics['scenarios']['total_scenarios'] }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Cycle Executions -->
+        {% if cycles %}
+        <div class="section">
+            <h2>Cycle Executions</h2>
+            <table class="cycles-table">
+                <thead>
+                    <tr>
+                        <th>Cycle</th>
+                        <th>Stage</th>
+                        <th>Start Time</th>
+                        <th>Expected Duration</th>
+                        <th>Actual Duration</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cycle in cycles %}
+                    <tr>
+                        <td>{{ cycle['cycle_number'] }}</td>
+                        <td>{{ cycle['stage'].upper() }}</td>
+                        <td>{{ cycle['start_time'] }}</td>
+                        <td>{{ cycle['expected_duration_sec'] // 60 }} min</td>
+                        <td>
+                            {% if cycle['actual_duration_sec'] %}
+                                {{ cycle['actual_duration_sec'] // 60 }} min
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="status-badge status-{{ cycle['status'] }}">
+                                {{ cycle['status'] }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- ESP32 Commands -->
+        {% if commands %}
+        <div class="section">
+            <h2>ESP32 Commands (Last 50)</h2>
+            <table class="commands-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Endpoint</th>
+                        <th>Payload</th>
+                        <th>Status</th>
+                        <th>Duration</th>
+                        <th>Response</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cmd in commands[:50] %}
+                    <tr>
+                        <td>{{ cmd['timestamp'] }}</td>
+                        <td>{{ cmd['endpoint'] }}</td>
+                        <td>
+                            <div class="command-payload">{{ cmd['payload'] }}</div>
+                        </td>
+                        <td>
+                            {% if cmd['response_status'] %}
+                                <span class="status-badge status-{{ 'online' if cmd['response_status'] == 200 else 'offline' }}">
+                                    {{ cmd['response_status'] }}
+                                </span>
+                            {% else %}
+                                <span class="status-badge status-error">Error</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ cmd['duration_ms'] }} ms</td>
+                        <td>
+                            {% if cmd['error'] %}
+                                <span style="color: #dc3545;">{{ cmd['error'] }}</span>
+                            {% else %}
+                                {{ cmd['response_body'][:50] }}...
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Test Scenarios (if any) -->
+        {% if scenarios and scenarios|length > 0 %}
+        <div class="section">
+            <h2>Test Scenarios</h2>
+            <table class="commands-table">
+                <thead>
+                    <tr>
+                        <th>Scenario</th>
+                        <th>Type</th>
+                        <th>Expected Result</th>
+                        <th>Actual Result</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scenario in scenarios %}
+                    <tr>
+                        <td>{{ scenario['scenario_name'] }}</td>
+                        <td>{{ scenario['scenario_type'] }}</td>
+                        <td>{{ scenario['expected_result'] }}</td>
+                        <td>{{ scenario['actual_result'] or '-' }}</td>
+                        <td>
+                            {% if scenario['passed'] == 1 %}
+                                <span class="status-badge status-completed">✓ Passed</span>
+                            {% elif scenario['passed'] == 0 %}
+                                <span class="status-badge status-error">✗ Failed</span>
+                            {% else %}
+                                <span class="status-badge">Pending</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
