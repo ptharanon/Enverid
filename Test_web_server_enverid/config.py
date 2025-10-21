@@ -10,7 +10,7 @@ load_dotenv()
 
 class Config:
     # ESP32 Connection
-    ESP32_IP = os.getenv('ESP32_IP', '192.168.1.55')
+    ESP32_IP = os.getenv('ESP32_IP', '172.29.247.180')
     ESP32_PORT = os.getenv('ESP32_PORT', '80')
     ESP32_BASE_URL = f"http://{ESP32_IP}:{ESP32_PORT}"
     
@@ -24,7 +24,7 @@ class Config:
     
     # Test Server
     TEST_SERVER_HOST = '0.0.0.0'
-    TEST_SERVER_PORT = 5000
+    TEST_SERVER_PORT = 8000
     DEBUG = True
     
     # Stage Parameters (matching web UI)

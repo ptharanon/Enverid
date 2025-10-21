@@ -337,9 +337,11 @@ class TestSuiteRunner:
         
         # Valid state transitions (based on ESP32 code)
         valid_transitions = [
-            ('scrub', 'regen'),
+            ('idle', 'scrub'),
             ('regen', 'cooldown'),
             ('cooldown', 'idle'),
+            ('scrub', 'idle'),      # Change to IDLE from any state is allowed
+            ('idle', 'idle'),       # Unchanged stage idle
         ]
         
         for from_state, to_state in valid_transitions:
@@ -353,7 +355,7 @@ class TestSuiteRunner:
             ('idle', 'cooldown'),   # Skip scrub and regen
             ('scrub', 'cooldown'),  # Skip regen
             ('regen', 'scrub'),     # Backward
-            ('cooldown', 'scrub'),  # Backward
+            ('regen', 'regen'),     # Unchanged stage except from idle to idle is not allowed
         ]
         
         for from_state, to_state in invalid_transitions:

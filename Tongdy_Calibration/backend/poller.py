@@ -46,9 +46,10 @@ class SensorPoller:
                     "type": "live_values", 
                     "data": {
                         "co2": co2, 
-                        "temperature": temp, 
+                        "temperature": temp, # Type_K only has temp 
                         "humidity": rh,
-                        "sensor_id": s.sensor_id if hasattr(s, "sensor_id") else 1
+                        "sensor_id": s.sensor_id if hasattr(s, "sensor_id") else 1,
+                        "sensor_type": s.sensor_type if hasattr(s, "sensor_type") else "unknown" # 'Tongdy', 'Type_K'
                 }})
 
                 batch = []

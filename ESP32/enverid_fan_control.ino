@@ -8,16 +8,20 @@
 
 bool IS_DEBUG_SERIAL_COMMAND = false;
 
+// Emergency shutdown threshold (milliseconds)
+// Only trigger emergency shutdown if time has exceeded endTime by this much
+constexpr unsigned long EMERGENCY_SHUTDOWN_THRESHOLD_MS = 10 * 60 * 1000UL; // 10 minutes
+
 //-------------------------------------------------
 // LINEAR INTERPOLATION TABLES
 //-------------------------------------------------
-const int NUM_POINTS = 20;
+const int NUM_POINTS = 21;
 const float percentTable[NUM_POINTS] = {
-  5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
+  0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
   55, 60, 65, 70, 75, 80, 85, 90, 95, 100
 };
 const float voltageTable[NUM_POINTS] = {
-  0.394, 1.176, 1.81, 2.4, 2.97, 3.54, 4.1, 4.65, 5.2, 5.75,
+  0, 0.394, 1.176, 1.81, 2.4, 2.97, 3.54, 4.1, 4.65, 5.2, 5.75,
   6.3, 6.84, 7.39, 7.93, 8.46, 9.0, 9.54, 10.1, 10.63, 10.63
 };
 
@@ -35,12 +39,8 @@ constexpr int LCD_SCL_PIN  = 22;
 
 constexpr float MAX_VOLTAGE = 10.0f;   // Converter output full-scale
 
-constexpr int PIN_HEATER_RELAY = 19;  // TODO Recheck
+constexpr int PIN_HEATER_RELAY = 5;
 
-// Emergency shutdown threshold (milliseconds)
-// Only trigger emergency shutdown if time has exceeded endTime by this much
-// This prevents premature shutdown during normal cyclic operations
-constexpr unsigned long EMERGENCY_SHUTDOWN_THRESHOLD_MS = 10 * 60 * 1000UL; // 10 minutes
 
 //------------------------------------------------
 // NETWORK SETTINGS
@@ -48,11 +48,10 @@ constexpr unsigned long EMERGENCY_SHUTDOWN_THRESHOLD_MS = 10 * 60 * 1000UL; // 1
 const char* WIFI_SSID = "NSTDA-Wifi-IoT";
 const char* WIFI_PASSWORD = "abcDEF99";
 
-IPAddress local_IP(172, 29, 147, 180);
-IPAddress gateway(172, 29, 147, 1); // Check gateway again
-IPAddress subnet(255, 255, 255, 0);
+IPAddress local_IP(172, 29, 247, 180);
+IPAddress gateway(172, 29, 247, 129); // Check gateway again
+IPAddress subnet(255, 255, 255, 224);
 IPAddress primaryDNS(8, 8, 8, 8);
-
 
 //------------------------------------------------
 // WEBSERVER SETTINGS
@@ -71,7 +70,7 @@ enum class SystemState: uint8_t {
 };
 
 // State transition validation
-// Valid transitions: IDLE -> SCRUB -> REGEN -> COOLDOWN -> IDLE
+// Valid transitions:  REGEN -> COOLDOWN -> IDLE -> SCRUB
 // MANUAL can transition to/from any state
 bool isValidTransition(SystemState from, SystemState to) {
   // MANUAL mode can be transitioned to/from any state
@@ -81,7 +80,7 @@ bool isValidTransition(SystemState from, SystemState to) {
 
   switch(from) {
     case SystemState::IDLE:
-      return (to == SystemState::SCRUBBING || to == SystemState::IDLE);
+      return (to == SystemState::SCRUBBING || to == SystemState::REGEN || to == SystemState::IDLE);
       
     case SystemState::SCRUBBING:
       return (to == SystemState::REGEN || to == SystemState::IDLE);
@@ -139,8 +138,33 @@ float commandedVoltage = 0.0f;
 float appliedPWMpercent = 0.0f;
 
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);   // 16 columns, 2 rows
+LiquidCrystal_I2C lcd(0x27, 16, 3);   // 16 columns, 2 rows
 
+//------------------------------------------------
+// LCD FUNCTIONS
+//------------------------------------------------
+
+// Update LCD with custom text for each row
+void updateLCD(const char* firstRow, const char* secondRow, const char* thirdRow = "") {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(firstRow);
+  
+  lcd.setCursor(0, 1);
+  lcd.print(secondRow);
+  
+  lcd.setCursor(0, 2);
+  lcd.print(thirdRow);
+}
+
+// LCD setup
+void setupLCD() {
+  Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  delay(1000);
+}
 
 //------------------------------------------------
 // HELPER FUNCTIONS
@@ -196,12 +220,12 @@ bool commandFanVoltage(float voltage) {
   return true;
 }
 
-// Relay control
+// Relay control (Active-LOW logic: LOW = ON, HIGH = OFF)
 inline void relayOn(int pin) {
-  digitalWrite(pin, HIGH);
+  digitalWrite(pin, LOW);   // Active-LOW: pull low to turn ON
 }
 inline void relayOff(int pin) {
-  digitalWrite(pin, LOW);
+  digitalWrite(pin, HIGH);  // Active-LOW: pull high to turn OFF
 }
 
 // Emergency shutdown to IDLE
@@ -219,34 +243,34 @@ inline void emergencyShutdown() {
   currentPercent = 0.0f;
   commandedVoltage = 0.0f;
   appliedPWMpercent = 0.0f;
+
+  char row1[17], row2[17], row3[17];
+  snprintf(row1, sizeof(row1), "State: %s", "Emergency OFF");
+  snprintf(row2, sizeof(row2), "Fan: %.1fV", commandedVoltage);
+  snprintf(row3, sizeof(row3), "Heat: %s", digitalRead(PIN_HEATER_RELAY) == LOW ? "ON" : "OFF");
+  updateLCD(row1, row2, row3);
 }
 
-//------------------------------------------------
-// LCD FUNCTIONS
-//------------------------------------------------
+inline void stop() {
+  commandFanVoltage(0.0f);
+  relayOff(PIN_HEATER_RELAY);
+  
+  // Thread-safe state update
+  if(xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    currentState = SystemState::IDLE;
+    stateEndTime = 0;
+    xSemaphoreGive(stateMutex);
+  }
+  
+  currentPercent = 0.0f;
+  commandedVoltage = 0.0f;
+  appliedPWMpercent = 0.0f;
 
-// TODO Redo the LCD update function to accept various checks
-void updateLCD(float cmdPct, float outV) {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Cmd: ");
-  lcd.print(cmdPct, 1);
-  lcd.print("%    ");
-
-  lcd.setCursor(0, 1);
-  lcd.print("Out: ");
-  lcd.print(outV, 2);
-  lcd.print(" V    ");
-}
-
-// LCD setup
-void setupLCD() {
-  Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
-  lcd.init();
-  lcd.backlight();
-  lcd.print("Calibrated Ready"); // TODO Change this
-  delay(1000);
-  lcd.clear();
+  char row1[17], row2[17], row3[17];
+  snprintf(row1, sizeof(row1), "State: %s", "Stopped");
+  snprintf(row2, sizeof(row2), "Fan: %.1fV", commandedVoltage);
+  snprintf(row3, sizeof(row3), "Heat: %s", digitalRead(PIN_HEATER_RELAY) == LOW ? "ON" : "OFF");
+  updateLCD(row1, row2, row3);
 }
 
 //--------------------------------------------------
@@ -286,6 +310,7 @@ AsyncCallbackJsonWebHandler* manageAutoHandler = new AsyncCallbackJsonWebHandler
   JsonObject jsonObj = json.as<JsonObject>();
   
   serializeJsonPretty(jsonObj, Serial); // Debug output
+  Serial.println();
 
   if(!jsonObj.containsKey("phase") || !jsonObj.containsKey("fan_volt") || 
      !jsonObj.containsKey("heater") || !jsonObj.containsKey("duration")) {
@@ -339,6 +364,13 @@ AsyncCallbackJsonWebHandler* manageAutoHandler = new AsyncCallbackJsonWebHandler
   // Exceptions: IDLE and MANUAL can be re-set
   if(localCurrentState == targetState && targetState != SystemState::MANUAL
   && targetState != SystemState::IDLE) {
+    Serial.println("Updating start/end time due to redundant state request");
+    Serial.print("Before start time: " + String(stateStartTime));
+    Serial.println("      ||      Current end time: " + String(stateEndTime));
+    stateStartTime = millis();
+    stateEndTime = stateStartTime + (unsigned long)duration * 60000UL; // Update end time to be safe
+    Serial.print("After start time: " + String(stateStartTime));
+    Serial.println("      ||      Current end time: " + String(stateEndTime));
     sendErrorResponse(request, 400, "Already in the target state");
     return;
   }
@@ -434,15 +466,29 @@ void stateQueueHandler(State state) {
   } else {
     relayOff(PIN_HEATER_RELAY);
   }
+
+  // Update LCD with current state information
+  char row1[17], row2[17], row3[17];
+  snprintf(row1, sizeof(row1), "State: %s", getStateName(state.state));
+  snprintf(row2, sizeof(row2), "Fan: %.1fV", state.fanVoltage);
+  snprintf(row3, sizeof(row3), "Heat: %s", state.heaterOn ? "ON" : "OFF");
+  updateLCD(row1, row2, row3);
 }
 
 //------------------------------------------------
 // ROUTES
 //------------------------------------------------
 void setupRoutes() {
-  // TODO Add emergency shutdown route
   // TODO Add status route ?
-  
+  server.on("/emergency_shutdown", HTTP_GET, [](AsyncWebServerRequest *request){
+    emergencyShutdown();
+    sendOkResponse(request, "IDLE");
+  });
+
+  server.on("/stop", HTTP_GET, [](AsyncWebServerRequest *request){
+    stop();
+    sendOkResponse(request, "IDLE");
+  });
 }
 
 //------------------------------------------------
@@ -464,7 +510,7 @@ void setupStateQueue() {
   stateQueue = xQueueCreate(10, sizeof(State));
   if(stateQueue == NULL) {
     Serial.println("Failed to create state queue");
-    updateLCD(0.0f, 0.0f); // TODO Indicate error on LCD
+    updateLCD("SYSTEM ERROR", "Queue failed", "Restart required");
     while(true) {
       // Softlock until reset
       delay(1000);
@@ -508,7 +554,11 @@ void handleDebugSerialCommand() {
     Serial.printf("Cmd=%.1f%% | Target V=%.2f | CalPWM=%.2f%% | duty=%u\n",
                   inputPct, expectedVoltage, correctedPercent, duty);
 
-    updateLCD(inputPct, expectedVoltage);
+    char row1[17], row2[17], row3[17];
+    snprintf(row1, sizeof(row1), "Cmd: %.1f%%", inputPct);
+    snprintf(row2, sizeof(row2), "Out: %.2fV", expectedVoltage);
+    snprintf(row3, sizeof(row3), "PWM: %.1f%%", correctedPercent);
+    updateLCD(row1, row2, row3);
   }
   else if (cmd.startsWith("v=")) {
     float volts = cmd.substring(2).toFloat();
@@ -524,7 +574,11 @@ void handleDebugSerialCommand() {
     Serial.printf("CmdV=%.2f V  -> PWM=%.2f%% (duty=%u)\n",
                   volts, pwmPercent, duty);
 
-    updateLCD(volts, pwmPercent);
+    char row1[17], row2[17], row3[17];
+    snprintf(row1, sizeof(row1), "Cmd: %.2fV", volts);
+    snprintf(row2, sizeof(row2), "PWM: %.2f%%", pwmPercent);
+    snprintf(row3, sizeof(row3), "Duty: %u", duty);
+    updateLCD(row1, row2, row3);
   }
   else {
     Serial.println("Unknown cmd. Use s=<0-100> to set percent.");
@@ -556,6 +610,17 @@ bool connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("Connected. IP: ");
     Serial.println(WiFi.localIP());
+
+    Serial.print("MAC address: ");
+    Serial.println(WiFi.macAddress());
+
+    char row1[17], row2[17], row3[17];
+    snprintf(row1, sizeof(row1), "System Init");
+    snprintf(row2, sizeof(row2), "%d.%d.%d.%d", 
+            local_IP[0], local_IP[1], local_IP[2], local_IP[3]);
+    snprintf(row3, sizeof(row3), "%s", WiFi.macAddress().c_str());
+
+    updateLCD(row1, row2, row3);
 
     server.addHandler(manageAutoHandler);
     server.addHandler(manageManualHandler);
@@ -592,7 +657,7 @@ void setup() {
   stateMutex = xSemaphoreCreateMutex();
   if(stateMutex == NULL) {
     Serial.println("Failed to create state mutex");
-    updateLCD(0.0f, 0.0f); // TODO Indicate error on LCD
+    updateLCD("SYSTEM ERROR", "Mutex failed", "Restart required");
     while(true) {
       // Softlock until reset
       delay(1000);
@@ -603,13 +668,11 @@ void setup() {
   setupStateQueue();
 
   // Connect to WiFi
-  if (!connectWiFi()) {
-    Serial.println("Failed to connect to WiFi. Require restart...");
-    updateLCD(0.0f, 0.0f); // TODO Indicate error on LCD
-    while(true) {
-      // Softlock until reset
-      delay(1000);
-    }
+  if (!connectWiFi() && !IS_DEBUG_SERIAL_COMMAND) {
+    Serial.println("Failed to connect to WiFi. ESP will restart...");
+    updateLCD("NETWORK ERROR", "WiFi failed", "Restarting...");
+    delay(2000);
+    ESP.restart();
   }
 }
 
@@ -634,6 +697,12 @@ void loop() {
         emergencyShutdown();
       }
     }
+  }
+
+  if(WiFi.status() != WL_CONNECTED && !IS_DEBUG_SERIAL_COMMAND) {
+    Serial.println("WiFi disconnected. Attempting reconnection...");
+    updateLCD("NETWORK ERROR", "Reconnecting...", "");
+    connectWiFi();
   }
   
   if(IS_DEBUG_SERIAL_COMMAND) {

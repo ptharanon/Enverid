@@ -13,10 +13,8 @@ from config import config
 from live_log import live_log
 
 
-class CycleManager:
-    """Manages cyclic test execution"""
-    
-    STAGE_ORDER = ['scrub', 'regen', 'cooldown', 'idle']
+class CycleManager:    
+    STAGE_ORDER = ['regen', 'cooldown', 'idle', 'scrub']
     
     def __init__(self, esp32_client: ESP32Client, database: TestDatabase):
         self.client = esp32_client
@@ -46,16 +44,7 @@ class CycleManager:
     def configure_test(self, regen_config: Dict, scrub_config: Dict,
                       cooldown_config: Dict, idle_config: Dict,
                       num_cycles: int) -> Dict:
-        """
-        Configure test parameters matching web UI format
-        
-        Args:
-            regen_config: {fan_volt, heater_temp, duration}
-            scrub_config: {fan_volt, duration}
-            cooldown_config: {fan_volt, duration}
-            idle_config: {duration}
-            num_cycles: Number of complete cycles
-        """
+
         self.test_config = {
             'regen': regen_config,
             'scrub': scrub_config,
@@ -67,7 +56,6 @@ class CycleManager:
         return self.test_config
     
     def start_test(self, test_name: str = None) -> bool:
-        """Start the cyclic test"""
         if self.is_running:
             return False
         
@@ -103,6 +91,10 @@ class CycleManager:
         
         # Start execution thread
         self.thread = threading.Thread(target=self._run_cycles, daemon=True)
+
+        # For loop 1 : for cycles 
+        # For loop 2 (inner): for stages in order
+
         self.thread.start()
         
         return True
@@ -127,19 +119,16 @@ class CycleManager:
         self._send_command('idle', 0)
     
     def pause_test(self):
-        """Pause the current test"""
         if self.is_running and not self.is_paused:
             self.pause_event.set()
             self.is_paused = True
     
     def resume_test(self):
-        """Resume paused test"""
         if self.is_running and self.is_paused:
             self.pause_event.clear()
             self.is_paused = False
     
     def get_status(self) -> Dict:
-        """Get current test status"""
         status = {
             'is_running': self.is_running,
             'is_paused': self.is_paused,
@@ -165,11 +154,9 @@ class CycleManager:
         return status
     
     def set_status_callback(self, callback: Callable):
-        """Set callback for status updates"""
         self.status_callback = callback
     
     def _notify_status(self):
-        """Notify status update via callback"""
         if self.status_callback:
             try:
                 self.status_callback(self.get_status())
@@ -177,7 +164,6 @@ class CycleManager:
                 print(f"Error in status callback: {e}")
     
     def _run_cycles(self):
-        """Main cycle execution loop (runs in separate thread)"""
         try:
             for cycle_num in range(1, self.total_cycles + 1):
                 if self.stop_event.is_set():
@@ -206,8 +192,13 @@ class CycleManager:
                         print("Test resumed")
                         live_log.add("Test resumed", level='info')
                     
+                    # Regen
                     success = self._execute_stage(stage, cycle_num)
                     
+                    # execute_stage ---> IF response from ESP32 is success ---> Set start time -> Set end time = start time + duration
+                    # Wait in while loop until duration elapsed -> time.time() > end time -> execute_stage return True
+
+
                     if not success:
                         print(f"ERROR: Stage {stage} failed. Stopping test.")
                         live_log.add(
@@ -268,7 +259,6 @@ class CycleManager:
             self._notify_status()
     
     def _execute_stage(self, stage: str, cycle_num: int) -> bool:
-        """Execute a single stage"""
         self.current_stage = stage
         stage_config = self.test_config[stage]
                 
@@ -299,6 +289,7 @@ class CycleManager:
         )
         
         # Send command to ESP32
+        # phase = regen, cycle = 1
         success = self._send_command(stage, cycle_execution_id)
         
         if not success:
@@ -312,7 +303,7 @@ class CycleManager:
         # Set timing
         self.stage_start_time = datetime.now()
         self.stage_end_time = self.stage_start_time + timedelta(minutes=duration_min)
-        self._notify_status()
+        # self._notify_status()
         
         # Wait for stage duration
         print(f"    Duration: {duration_min} minutes")
@@ -335,6 +326,7 @@ class CycleManager:
             time.sleep(1)
             
             # Update status every 5 seconds
+            # TODO Implement callback-based status updates
             if int(time.time()) % 5 == 0:
                 self._notify_status()
         
@@ -349,7 +341,6 @@ class CycleManager:
         return True
     
     def _send_command(self, stage: str, cycle_execution_id: Optional[int] = None) -> bool:
-        """Send command to ESP32 for a specific stage"""
         stage_config = self.test_config.get(stage, {})
         
         # Build command based on stage

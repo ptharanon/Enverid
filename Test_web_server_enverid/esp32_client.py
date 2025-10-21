@@ -25,7 +25,7 @@ class ESP32Client:
         """
         url = f"{self.base_url}{endpoint}"
         start_time = time.time()
-        
+                
         for attempt in range(self.retry_attempts):
             try:
                 response = requests.post(
