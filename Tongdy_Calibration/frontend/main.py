@@ -24,23 +24,26 @@ class App(MDApp):
 
         # Hardware
         if self.use_mock:
-            self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
-            self.esp32 = ESP32Interface(mode="", sensors=self.sensors)  # mock ESP32 interface
+            self.sensors = [MockSensor(sensor_id=91), MockSensor(sensor_id=92), MockSensor(sensor_id=93), MockSensor(sensor_id=94)]  # four mock sensors
+            self.esp32 = ESP32Interface(mode="MOCK", sensors=self.sensors)  # mock ESP32 interface
         else:
+            port = "/dev/ttyUSB0"
             # self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
             # self.sensors = [TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=1, slave_address=1, is_VOC=True),
             #                 TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=2, slave_address=10, is_VOC=False)] 
-            self.sensors = [TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=1, slave_address=2, is_VOC=True),
-                            TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=2, slave_address=3, is_VOC=False)]
-            # self.sensors = [TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=1, slave_address=2, is_VOC=True)]
+            # self.sensors = [TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=1, slave_address=2, is_VOC=True),
+            #                 TongdySensor(port="/dev/tty.usbmodem56D11266251", sensor_id=2, slave_address=3, is_VOC=False)]
 
+            self.sensors = [TongdySensor(port=port, sensor_id=11, slave_address=11, is_VOC=False),
+                            TongdySensor(port=port, sensor_id=12, slave_address=12, is_VOC=False),
+                            TongdySensor(port=port, sensor_id=13, slave_address=13, is_VOC=False),
+                            TongdySensor(port=port, sensor_id=14, slave_address=14, is_VOC=False)]
             # Give it a consistent id so DB rows have a sensor_id
             # self.sensor.sensor_id = 1 # hardcoded for now
             # self.sensors = [self.sensor]
 
             # Hardcoded for now, adjust as needed (REST or GPIO)
-            self.esp32 = ESP32Interface("REST", sensors=self.sensors) # or "GPIO"
-
+            self.esp32 = ESP32Interface("REST", sensors=self.sensors)
 
         # Background services
         self.poller = SensorPoller(sensors=self.sensors, interval=5)
@@ -61,4 +64,3 @@ class App(MDApp):
         except Exception:
             pass
         db_queue.put({"type": "stop"})  # stop DB worker
-

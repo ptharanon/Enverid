@@ -15,10 +15,12 @@ class CalibrationController:
     """
 
     def __init__(self, sensors, esp32, sample_period_s=5):
-        self.TIME = 10 # debug timer 10s
+        self.PHASES = ["baseline", "exposure", "vented"]
+        self.TIME_GAS_INJECTIONS = [3, 7, 14]  # 3 points calibration
+
+        self.TIME = 10  # debug timer 10s
         self.TIME_CIRCULATION = 240
 
-        self.TIME_GAS_INJECTION = 12
         self.TIME_VENT = 660
         self.TIME_GET_AVG = 120
 
@@ -32,7 +34,8 @@ class CalibrationController:
         self.struct = {s.sensor_id: {"baseline": None, "exposure": None, "vented": None} for s in sensors}
 
     def start(self):
-        if self.running: return
+        if self.running:
+            return
         self.running = True
         self.thread = threading.Thread(target=self._process, daemon=True)
         self.thread.start()
@@ -53,7 +56,7 @@ class CalibrationController:
         for sid, val in results.items():
             self.struct[sid][key] = val
         ui_queue.put({"type": "struct_update", "struct": dict(self.struct)})
-    
+
     def _collect_avg(self, duration_s: int):
         values = {s.sensor_id: [] for s in self.sensors}
         start = time.time()
@@ -72,60 +75,45 @@ class CalibrationController:
 
     def _process(self):
         try:
-            # 1) Baseline
-            self._status(f"Collecting baseline - Circulation+Vent ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
-            self.esp32.vent()
-            self.esp32.start_circulation()
-            self._sleep_with_checks(self.TIME_CIRCULATION)
-            self.vent_off()
-            self._status(f"Collecting baseline - Collection ({self.TIME_GET_AVG} {self.TIME_UNIT})")
-            avg = self._collect_avg(self.TIME_GET_AVG)
-            self._push_struct("baseline", avg)
-            if not self.running: return
+            for injection_time in self.TIME_GAS_INJECTIONS:
+                for phase in self.PHASES:
+                    if phase == "baseline":
+                        self._status(f"Precondition - Circulation ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
+                        self.esp32.vent()
+                        self.esp32.start_circulation()
+                        self._sleep_with_checks(self.TIME_CIRCULATION)
+                        self.esp32.vent_off()
+                    elif phase == "exposure":
+                        self._status(f"Injecting calibration gas ({injection_time} {self.TIME_UNIT})")
+                        self.esp32.start_gas()
+                        self._sleep_with_checks(injection_time)
+                        self.esp32.stop_gas()
+                        self._status(f"Exposure - Circulation ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
+                        self._sleep_with_checks(self.TIME_CIRCULATION)
+                    elif phase == "vented":
+                        self._status(f"Venting ({self.TIME_VENT} {self.TIME_UNIT})")
+                        self.esp32.vent()
+                        self._sleep_with_checks(self.TIME_VENT)
+                        self.esp32.vent_off()
+                        self._status(f"Post-vent - Circulation ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
+                        self._sleep_with_checks(self.TIME_CIRCULATION)
 
-            # 2) Gas injection hold
-            self._status(f"Injecting calibration gas ({self.TIME_GAS_INJECTION} {self.TIME_UNIT})")
-            self.esp32.start_gas()
-            self._sleep_with_checks(self.TIME_GAS_INJECTION)            
-            self.esp32.stop_gas()
-            if not self.running: return
-
-            # 3) Exposure measurement
-            self._status(f"Collecting exposure - Circulation ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
-            self._sleep_with_checks(self.TIME_CIRCULATION)
-            self._status(f"Collecting exposure - Collection ({self.TIME_GET_AVG} {self.TIME_UNIT})")
-            avg = self._collect_avg(self.TIME_GET_AVG)
-            self._push_struct("exposure", avg)
-            if not self.running: return
-
-            # 4) Vent
-            self._status(f"Venting ({self.TIME_VENT} {self.TIME_UNIT})")
-            self.esp32.vent()
-            self._sleep_with_checks(self.TIME_VENT)
-            self.esp32.vent_off()
-            if not self.running: return
-
-            # 5) Post-vent measurement
-            self._status(f"Collecting post-vent ({self.TIME_CIRCULATION} {self.TIME_UNIT})")
-            self._sleep_with_checks(self.TIME_CIRCULATION)
-
-            self._status(f"Collecting post-vent ({self.TIME_GET_AVG} {self.TIME_UNIT})")
-            avg = self._collect_avg(self.TIME_GET_AVG)
-            self.esp32.stop_circulation()
-            self._push_struct("vented", avg)
-            if not self.running: return
-
-            # 6) Save
-            self._status("Saving calibration record")
-            for sid, res in self.struct.items():
-                db_queue.put({
-                    "type": "calibration",
-                    "sensor_id": sid,
-                    "baseline": res["baseline"],
-                    "exposure": res["exposure"],
-                    "vented": res["vented"],
-                    "injection_time_s": self.TIME_GAS_INJECTION,
-                })
+                    self._status(f"Collecting {phase} - Collection ({self.TIME_GET_AVG} {self.TIME_UNIT})")
+                    avg = self._collect_avg(self.TIME_GET_AVG)
+                    self._push_struct(phase, avg)
+                    if not self.running:
+                        return
+                # Save
+                self._status("Saving calibration record")
+                for sid, res in self.struct.items():
+                    db_queue.put({
+                        "type": "calibration",
+                        "sensor_id": sid,
+                        "baseline": res["baseline"],
+                        "exposure": res["exposure"],
+                        "vented": res["vented"],
+                        "injection_time_s": injection_time,
+                    })
             self._status("Calibration complete")
         finally:
             self.running = False
