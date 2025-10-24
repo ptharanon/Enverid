@@ -1,4 +1,3 @@
-import argparse
 import sys
 import math
 from pathlib import Path
@@ -8,8 +7,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 INLINE_DATA = [
-    # Structure (if want to create csv import file)
-    # experiment, sensor_id, baseline, exposure, post_vent, injection_time
     {"experiment": 1, "sensor_id": 11,  "baseline": 435.1, "exposure": 754.1, "post_vent": 434.9, "injection_time": 2},
     {"experiment": 1, "sensor_id": 12,  "baseline": 481.33, "exposure": 807, "post_vent": 481, "injection_time": 2},
     {"experiment": 1, "sensor_id": 13,  "baseline": 438.92, "exposure": 760.8, "post_vent": 440.9, "injection_time": 2},
