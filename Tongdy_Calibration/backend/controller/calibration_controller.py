@@ -16,7 +16,7 @@ class CalibrationController:
 
     def __init__(self, sensors, esp32, sample_period_s=5):
         self.PHASES = ["baseline", "exposure", "vented"]
-        self.TIME_GAS_INJECTIONS = [3, 7, 14]  # 3 points calibration
+        self.TIME_GAS_INJECTIONS = [2, 4, 8]  # 3 points calibration
 
         self.TIME = 10  # debug timer 10s
         self.TIME_CIRCULATION = 240

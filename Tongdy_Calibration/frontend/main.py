@@ -27,7 +27,7 @@ class App(MDApp):
             self.sensors = [MockSensor(sensor_id=91), MockSensor(sensor_id=92), MockSensor(sensor_id=93), MockSensor(sensor_id=94)]  # four mock sensors
             self.esp32 = ESP32Interface(mode="MOCK", sensors=self.sensors)  # mock ESP32 interface
         else:
-            port = "/dev/ttyUSB0"
+            port = "/dev/tty.usbserial-AJ0391MP"
             # self.sensors = [MockSensor(sensor_id=1), MockSensor(sensor_id=2)]  # two mock sensors
             # self.sensors = [TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=1, slave_address=1, is_VOC=True),
             #                 TongdySensor(port="/dev/tty.usbserial-BG00Y792", sensor_id=2, slave_address=10, is_VOC=False)] 
