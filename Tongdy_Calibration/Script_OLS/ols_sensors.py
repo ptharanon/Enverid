@@ -7,32 +7,33 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 INLINE_DATA = [
-    {"experiment": 1, "sensor_id": 11,  "baseline": 435.1, "exposure": 754.1, "post_vent": 434.9, "injection_time": 2},
-    {"experiment": 1, "sensor_id": 12,  "baseline": 481.33, "exposure": 807, "post_vent": 481, "injection_time": 2},
-    {"experiment": 1, "sensor_id": 13,  "baseline": 438.92, "exposure": 760.8, "post_vent": 440.9, "injection_time": 2},
-    {"experiment": 1, "sensor_id": 14,  "baseline": 674.5, "exposure": 1029.6, "post_vent": 676, "injection_time": 2},
-    {"experiment": 1, "sensor_id": 99, "baseline": 516, "exposure": 855, "post_vent": 520, "injection_time": 2},
+    {"experiment": 1, "sensor_id": 101,  "baseline": 536, "exposure": 751, "post_vent": 576, "injection_time": 2},
+    {"experiment": 1, "sensor_id": 99, "baseline": 571, "exposure": 802, "post_vent": 620, "injection_time": 2},
 
-    {"experiment": 2, "sensor_id": 11,  "baseline": 433.44, "exposure": 998.45, "post_vent": 435.3, "injection_time": 4},
-    {"experiment": 2, "sensor_id": 12,  "baseline": 478.5, "exposure": 1059.36, "post_vent": 485.91, "injection_time": 4},
-    {"experiment": 2, "sensor_id": 13,  "baseline": 436.7, "exposure": 1007.55, "post_vent": 443.73, "injection_time": 4},
-    {"experiment": 2, "sensor_id": 14,  "baseline": 674, "exposure": 1307.64, "post_vent": 683, "injection_time": 4},
-    {"experiment": 2, "sensor_id": 99, "baseline": 519, "exposure": 1134, "post_vent": 526, "injection_time": 4},
+    {"experiment": 2, "sensor_id": 101,  "baseline": 581, "exposure": 1445, "post_vent": 610, "injection_time": 4},
+    {"experiment": 2, "sensor_id": 99, "baseline": 624, "exposure": 1473, "post_vent": 652, "injection_time": 4},
 
-    {"experiment": 3, "sensor_id": 11,  "baseline": 434.58, "exposure": 1534.5, "post_vent": 452.22, "injection_time": 8},
-    {"experiment": 3, "sensor_id": 12,  "baseline": 484.17, "exposure": 1605.8, "post_vent": 496.67, "injection_time": 8},
-    {"experiment": 3, "sensor_id": 13,  "baseline": 442.67, "exposure": 1549.6, "post_vent": 458.0, "injection_time": 8},
-    {"experiment": 3, "sensor_id": 14,  "baseline": 682.73, "exposure": 1888.89, "post_vent": 696.3, "injection_time": 8},
-    {"experiment": 3, "sensor_id": 99, "baseline": 525, "exposure": 1699, "post_vent": 543, "injection_time": 8},
+    {"experiment": 3, "sensor_id": 101,  "baseline": 611, "exposure": 2423, "post_vent": 652, "injection_time": 8},
+    {"experiment": 3, "sensor_id": 99, "baseline": 658, "exposure": 2487, "post_vent": 707, "injection_time": 8},
 ]
 # =========================
 
 PHASES = ["baseline", "exposure", "post_vent"]
 CONTROL_DEFAULT = 99
 
-def linreg(x, y):
-    b, a = np.polyfit(x, y, 1)
-    yhat = a + b * x
+def linreg(x, y, force_slope_one=False):
+    if force_slope_one:
+        # Offset-only calibration: y = x + offset
+        # Find offset that minimizes error: offset = mean(y - x)
+        offset = float((y - x).mean())
+        a = offset  # intercept
+        b = 1.0     # slope fixed at 1.0
+        yhat = a + b * x
+    else:
+        # Standard OLS with both slope and intercept
+        b, a = np.polyfit(x, y, 1)
+        yhat = a + b * x
+    
     resid = y - yhat
     ss_res = float((resid**2).sum())
     ss_tot = float(((y - y.mean())**2).sum())
@@ -162,7 +163,61 @@ def plot_injected_co2_vs_time(df, sensor_fits, title, outpath, apply_calibration
     plt.savefig(outpath, dpi=150)
     plt.close()
 
-def run(outdir: Path, control_id):
+
+def plot_absolute_co2_vs_time(df, sensor_fits, title, outpath, apply_calibration=False, control_id=99):
+    fig, axes = plt.subplots(2, 1, figsize=(10, 10))
+    
+    colors = ['#E63946', '#2A9D8F', '#F4A261', '#8338EC', '#3A86FF', '#FB5607']
+    phases = ['baseline', 'exposure']
+    phase_labels = ['Baseline CO₂ Levels', 'Exposure CO₂ Levels']
+    
+    sensors = sorted([s for s in df['sensor_id'].unique() if s != control_id])
+    
+    for idx, (phase, phase_label) in enumerate(zip(phases, phase_labels)):
+        ax = axes[idx]
+        
+        # Plot test sensors
+        for sid, color in zip(sensors, colors):
+            sensor_data = df[df['sensor_id'] == sid].copy()
+            injection_times = sensor_data['injection_time'].to_numpy(dtype=float)
+            phase_values = sensor_data[phase].to_numpy(dtype=float)
+            
+            if apply_calibration and sid in sensor_fits:
+                fit = sensor_fits[sid]
+                phase_values = fit['intercept'] + fit['slope'] * phase_values
+            
+            ax.plot(injection_times, phase_values, 'o-',
+                   label=f"Sensor {int(sid)}", 
+                   color=color, linewidth=2.5, markersize=9, alpha=0.8)
+        
+        # Plot control sensor
+        control_data = df[df['sensor_id'] == control_id].copy()
+        injection_times_control = control_data['injection_time'].to_numpy(dtype=float)
+        phase_values_control = control_data[phase].to_numpy(dtype=float)
+        
+        ax.plot(injection_times_control, phase_values_control, 's-',
+               label=f"Control (Sensor {int(control_id)})", 
+               color='black', linewidth=3, markersize=10, alpha=0.9)
+        
+        ax.set_xlabel("Injection Time (seconds)", fontsize=11)
+        ax.set_ylabel("CO₂ (ppm)", fontsize=11)
+        ax.set_title(phase_label, fontsize=12, fontweight='bold')
+        ax.legend(loc='best', fontsize=10)
+        
+        if phase == 'baseline':
+            ax.yaxis.set_major_locator(plt.MultipleLocator(10))
+            ax.yaxis.set_minor_locator(plt.MultipleLocator(2))
+            ax.grid(True, which='major', alpha=0.5)
+            ax.grid(True, which='minor', alpha=0.2)
+        else:
+            ax.grid(True, alpha=0.3)
+    
+    fig.suptitle(title, fontsize=13, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    plt.savefig(outpath, dpi=150)
+    plt.close()
+
+def run(outdir: Path, control_id, offset_only=True):
     df = pd.DataFrame(INLINE_DATA)
     for col in ["experiment", "sensor_id"] + PHASES:
         if col not in df.columns:
@@ -176,7 +231,7 @@ def run(outdir: Path, control_id):
         sub = merged[merged["sensor_id_sensor"] == sid].copy()
         x = sub["reading_sensor"].to_numpy(dtype=float)
         y = sub["reading_control"].to_numpy(dtype=float)
-        fit = linreg(x, y)
+        fit = linreg(x, y, force_slope_one=offset_only)
 
         raw_plot = outdir / f"sensor_{sid}_raw_vs_control.png"
         cal_plot = outdir / f"sensor_{sid}_calibrated_vs_control.png"
@@ -241,6 +296,25 @@ def run(outdir: Path, control_id):
         control_id=control_id
     )
 
+    absolute_raw_plot = outdir / "absolute_co2_raw_vs_time.png"
+    absolute_cal_plot = outdir / "absolute_co2_calibrated_vs_time.png"
+
+    plot_absolute_co2_vs_time(
+        df, sensor_fits,
+        title="Absolute CO₂ Levels vs Injection Time (Raw Sensors)",
+        outpath=absolute_raw_plot,
+        apply_calibration=False,
+        control_id=control_id
+    )
+
+    plot_absolute_co2_vs_time(
+        df, sensor_fits,
+        title="Absolute CO₂ Levels vs Injection Time (Calibrated Sensors)",
+        outpath=absolute_cal_plot,
+        apply_calibration=True,
+        control_id=control_id
+    )
+
     residual_rows = []
     for sid in sensors:
         sub = merged[merged["sensor_id_sensor"] == sid].copy()
@@ -264,7 +338,8 @@ def run(outdir: Path, control_id):
     residuals_path = outdir / "calibration_point_residuals.csv"
     residuals.to_csv(residuals_path, index=False)
 
-    print("=== OLS Calibration Equations ===")
+    cal_method = "Offset-Only" if offset_only else "Full OLS"
+    print(f"=== {cal_method} Calibration Equations ===")
     for _, row in summary.iterrows():
         print(f"Sensor {row['sensor_id']}: y = {row['intercept']:.6f} + {row['slope']:.9f} * x   (R^2={row['R2']:.5f}, RMSE={row['RMSE_ppm']:.2f} ppm, n={int(row['n_points'])})")
     print(f"\nWrote summary: {summary_path}")
@@ -274,8 +349,11 @@ def run(outdir: Path, control_id):
     print(f"Combined calibrated plot: {all_cal_plot}")
     print(f"Injected CO2 raw plot: {injected_raw_plot}")
     print(f"Injected CO2 calibrated plot: {injected_cal_plot}")
+    print(f"Absolute CO2 raw plot: {absolute_raw_plot}")
+    print(f"Absolute CO2 calibrated plot: {absolute_cal_plot}")
 
-def run_with_csv(csv_path: Path, outdir: Path, control_id):
+
+def run_with_csv(csv_path: Path, outdir: Path, control_id, offset_only=True):
     df = pd.read_csv(csv_path)
 
     def resolve(df, candidates):
@@ -308,7 +386,7 @@ def run_with_csv(csv_path: Path, outdir: Path, control_id):
         sub = merged[merged["sensor_id_sensor"] == sid].copy()
         x = sub["reading_sensor"].to_numpy(dtype=float)
         y = sub["reading_control"].to_numpy(dtype=float)
-        fit = linreg(x, y)
+        fit = linreg(x, y, force_slope_one=offset_only)
 
         raw_plot = outdir / f"sensor_{sid}_raw_vs_control.png"
         cal_plot = outdir / f"sensor_{sid}_calibrated_vs_control.png"
@@ -374,6 +452,25 @@ def run_with_csv(csv_path: Path, outdir: Path, control_id):
         control_id=control_id
     )
 
+    absolute_raw_plot = outdir / "absolute_co2_raw_vs_time.png"
+    absolute_cal_plot = outdir / "absolute_co2_calibrated_vs_time.png"
+
+    plot_absolute_co2_vs_time(
+        df, sensor_fits,
+        title="Absolute CO₂ Levels vs Injection Time (Raw Sensors)",
+        outpath=absolute_raw_plot,
+        apply_calibration=False,
+        control_id=control_id
+    )
+
+    plot_absolute_co2_vs_time(
+        df, sensor_fits,
+        title="Absolute CO₂ Levels vs Injection Time (Calibrated Sensors)",
+        outpath=absolute_cal_plot,
+        apply_calibration=True,
+        control_id=control_id
+    )
+
     residual_rows = []
     for sid in sensors:
         sub = merged[merged["sensor_id_sensor"] == sid].copy()
@@ -397,7 +494,8 @@ def run_with_csv(csv_path: Path, outdir: Path, control_id):
     residuals_path = outdir / "calibration_point_residuals.csv"
     residuals.to_csv(residuals_path, index=False)
 
-    print("=== OLS Calibration Equations (CSV DATA) ===")
+    cal_method = "Offset-Only" if offset_only else "Full OLS"
+    print(f"=== {cal_method} Calibration Equations (CSV DATA) ===")
     for _, row in summary.iterrows():
         print(f"Sensor {row['sensor_id']}: y = {row['intercept']:.6f} + {row['slope']:.9f} * x   (R^2={row['R2']:.5f}, RMSE={row['RMSE_ppm']:.2f} ppm, n={int(row['n_points'])})")
     print(f"\nSummary: {summary_path}")
@@ -407,6 +505,9 @@ def run_with_csv(csv_path: Path, outdir: Path, control_id):
     print(f"Combined calibrated plot: {all_cal_plot}")
     print(f"Injected CO2 raw plot: {injected_raw_plot}")
     print(f"Injected CO2 calibrated plot: {injected_cal_plot}")
+    print(f"Absolute CO2 raw plot: {absolute_raw_plot}")
+    print(f"Absolute CO2 calibrated plot: {absolute_cal_plot}")
+
 
 def main():
     outdir: Path = Path("calibration_output")
